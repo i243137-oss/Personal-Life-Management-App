@@ -10,6 +10,7 @@ const transactionRoutes = require('./routes/transactionRoutes');
 const loanRoutes = require('./routes/loanRoutes');
 const dictionaryRoutes = require('./routes/dictionaryRoutes');
 const luggageRoutes = require('./routes/luggageRoutes');
+const noteRoutes = require('./routes/noteRoutes');
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/loans', loanRoutes);
 app.use('/api/dictionary', dictionaryRoutes);
 app.use('/api/luggage', luggageRoutes);
+app.use('/api/notes', noteRoutes);
 
 // 404 handler
 app.use((req, res) => {

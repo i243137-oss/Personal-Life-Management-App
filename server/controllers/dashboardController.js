@@ -1,6 +1,7 @@
 const Transaction = require('../models/Transaction');
 const Loan = require('../models/Loan');
 const Luggage = require('../models/Luggage');
+const Note = require('../models/Note');
 
 // @desc    Get dashboard summary for authenticated user
 // @route   GET /api/dashboard/summary
@@ -75,6 +76,16 @@ const getDashboardSummary = async (req, res) => {
       console.warn('Could not query luggage for dashboard:', luggageErr.message);
     }
 
+    // Compute notes metrics
+    let totalNotesCount = 0;
+    let pinnedNotesCount = 0;
+    try {
+      totalNotesCount = await Note.countDocuments({ userId, isArchived: false });
+      pinnedNotesCount = await Note.countDocuments({ userId, isArchived: false, isPinned: true });
+    } catch (noteErr) {
+      console.warn('Could not query notes for dashboard:', noteErr.message);
+    }
+
     // Format recent activity
     const recentActivity = transactions.map((t) => ({
       id: t._id,
@@ -94,6 +105,8 @@ const getDashboardSummary = async (req, res) => {
         othersOwe,
         activeLuggageTrips,
         pendingPackingCount,
+        totalNotesCount,
+        pinnedNotesCount,
         recentActivity,
       },
     });

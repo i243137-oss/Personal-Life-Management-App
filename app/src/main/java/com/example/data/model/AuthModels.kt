@@ -65,6 +65,8 @@ data class DashboardData(
     @Json(name = "othersOwe") val othersOwe: Double = 0.0,
     @Json(name = "activeLuggageTrips") val activeLuggageTrips: Int = 0,
     @Json(name = "pendingPackingCount") val pendingPackingCount: Int = 0,
+    @Json(name = "totalNotesCount") val totalNotesCount: Int = 0,
+    @Json(name = "pinnedNotesCount") val pinnedNotesCount: Int = 0,
     @Json(name = "recentActivity") val recentActivity: List<TransactionDto> = emptyList()
 )
 

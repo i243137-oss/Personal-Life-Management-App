@@ -14,6 +14,10 @@ import com.example.data.model.CreateLuggageTripRequest
 import com.example.data.model.UpdateLuggageTripRequest
 import com.example.data.model.AddLuggageItemRequest
 import com.example.data.model.UpdateLuggageItemRequest
+import com.example.data.model.ChecklistItemDto
+import com.example.data.model.NoteDto
+import com.example.data.model.CreateNoteRequest
+import com.example.data.model.UpdateNoteRequest
 import com.example.data.model.QuickPresetDto
 import com.example.data.model.RepaymentDto
 import com.example.data.model.TransactionDto
@@ -52,11 +56,14 @@ class LocalDataManager(context: Context) {
         Types.newParameterizedType(List::class.java, WordItemDto::class.java)
     private val luggageListType =
         Types.newParameterizedType(List::class.java, LuggageTripDto::class.java)
+    private val noteListType =
+        Types.newParameterizedType(List::class.java, NoteDto::class.java)
 
     private val transactionAdapter = moshi.adapter<List<TransactionDto>>(transactionListType)
     private val loanAdapter = moshi.adapter<List<LoanDto>>(loanListType)
     private val wordAdapter = moshi.adapter<List<WordItemDto>>(wordListType)
     private val luggageAdapter = moshi.adapter<List<LuggageTripDto>>(luggageListType)
+    private val noteAdapter = moshi.adapter<List<NoteDto>>(noteListType)
 
     private val _transactionsFlow = MutableStateFlow<List<TransactionDto>>(emptyList())
     val transactionsFlow: Flow<List<TransactionDto>> = _transactionsFlow.asStateFlow()
@@ -70,6 +77,9 @@ class LocalDataManager(context: Context) {
     private val _luggageTripsFlow = MutableStateFlow<List<LuggageTripDto>>(emptyList())
     val luggageTripsFlow: Flow<List<LuggageTripDto>> = _luggageTripsFlow.asStateFlow()
 
+    private val _notesFlow = MutableStateFlow<List<NoteDto>>(emptyList())
+    val notesFlow: Flow<List<NoteDto>> = _notesFlow.asStateFlow()
+
     init {
         loadFromPrefs()
         if (_transactionsFlow.value.isEmpty() && _loansFlow.value.isEmpty()) {
@@ -77,6 +87,9 @@ class LocalDataManager(context: Context) {
         }
         if (_luggageTripsFlow.value.isEmpty()) {
             seedDefaultLuggageData()
+        }
+        if (_notesFlow.value.isEmpty()) {
+            seedDefaultNotesData()
         }
     }
 
@@ -115,6 +128,25 @@ class LocalDataManager(context: Context) {
                 _luggageTripsFlow.value = list
             } catch (_: Exception) {
             }
+        }
+
+        val notesJson = prefs.getString(KEY_NOTES, null)
+        if (!notesJson.isNullOrBlank()) {
+            try {
+                val list = noteAdapter.fromJson(notesJson) ?: emptyList()
+                _notesFlow.value = list
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun saveNotes(list: List<NoteDto>) {
+        _notesFlow.value = list
+        try {
+            val json = noteAdapter.toJson(list)
+            prefs.edit().putString(KEY_NOTES, json).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -608,6 +640,10 @@ class LocalDataManager(context: Context) {
             pendingPackingCount += trip.items.count { !it.isPacked }
         }
 
+        val notes = _notesFlow.value
+        val totalNotesCount = notes.count { !it.isArchived }
+        val pinnedNotesCount = notes.count { !it.isArchived && it.isPinned }
+
         return DashboardData(
             currentBalance = currentBalance,
             todayExpenses = todayExpenses,
@@ -615,6 +651,8 @@ class LocalDataManager(context: Context) {
             othersOwe = othersOwe,
             activeLuggageTrips = activeLuggageTrips,
             pendingPackingCount = pendingPackingCount,
+            totalNotesCount = totalNotesCount,
+            pinnedNotesCount = pinnedNotesCount,
             recentActivity = txs.take(5)
         )
     }
@@ -1170,10 +1208,206 @@ class LocalDataManager(context: Context) {
         saveLuggage(seeded)
     }
 
+    // --- Phase 6: Notes & Documents Methods ---
+
+    fun getNotes(
+        category: String? = null,
+        search: String? = null,
+        isArchived: Boolean = false,
+        isPinned: Boolean? = null
+    ): List<NoteDto> {
+        return _notesFlow.value.filter { note ->
+            val matchesArchive = note.isArchived == isArchived
+            val matchesCategory = category.isNullOrBlank() || category == "All" || note.category.equals(category, ignoreCase = true)
+            val matchesPinned = isPinned == null || note.isPinned == isPinned
+            val matchesSearch = if (search.isNullOrBlank()) true else {
+                note.title.contains(search, ignoreCase = true) ||
+                note.content.contains(search, ignoreCase = true) ||
+                note.tags.any { it.contains(search, ignoreCase = true) }
+            }
+            matchesArchive && matchesCategory && matchesPinned && matchesSearch
+        }.sortedWith(compareByDescending<NoteDto> { it.isPinned }.thenByDescending { it.updatedAt ?: it.createdAt ?: "" })
+    }
+
+    fun getNoteById(id: String): NoteDto? {
+        return _notesFlow.value.find { it.id == id }
+    }
+
+    fun createNote(request: CreateNoteRequest): NoteDto {
+        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val newId = "note_${UUID.randomUUID().toString().take(8)}"
+        val note = NoteDto(
+            id = newId,
+            title = request.title.trim(),
+            content = request.content.trim(),
+            category = request.category,
+            tags = request.tags,
+            isPinned = request.isPinned,
+            isArchived = request.isArchived,
+            colorHex = request.colorHex,
+            checklist = request.checklist,
+            createdAt = now,
+            updatedAt = now
+        )
+        val current = _notesFlow.value.toMutableList()
+        current.add(0, note)
+        saveNotes(current)
+        return note
+    }
+
+    fun updateNote(id: String, request: UpdateNoteRequest): NoteDto? {
+        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val current = _notesFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == id }
+        if (index == -1) return null
+
+        val existing = current[index]
+        val updated = existing.copy(
+            title = request.title?.trim() ?: existing.title,
+            content = request.content?.trim() ?: existing.content,
+            category = request.category ?: existing.category,
+            tags = request.tags ?: existing.tags,
+            isPinned = request.isPinned ?: existing.isPinned,
+            isArchived = request.isArchived ?: existing.isArchived,
+            colorHex = request.colorHex ?: existing.colorHex,
+            checklist = request.checklist ?: existing.checklist,
+            updatedAt = now
+        )
+        current[index] = updated
+        saveNotes(current)
+        return updated
+    }
+
+    fun deleteNote(id: String): Boolean {
+        val current = _notesFlow.value.toMutableList()
+        val removed = current.removeAll { it.id == id }
+        if (removed) {
+            saveNotes(current)
+        }
+        return removed
+    }
+
+    fun togglePinNote(id: String): NoteDto? {
+        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val current = _notesFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == id }
+        if (index == -1) return null
+
+        val existing = current[index]
+        val updated = existing.copy(
+            isPinned = !existing.isPinned,
+            updatedAt = now
+        )
+        current[index] = updated
+        saveNotes(current)
+        return updated
+    }
+
+    fun toggleArchiveNote(id: String): NoteDto? {
+        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val current = _notesFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == id }
+        if (index == -1) return null
+
+        val existing = current[index]
+        val newArchived = !existing.isArchived
+        val updated = existing.copy(
+            isArchived = newArchived,
+            isPinned = if (newArchived) false else existing.isPinned,
+            updatedAt = now
+        )
+        current[index] = updated
+        saveNotes(current)
+        return updated
+    }
+
+    fun toggleChecklistItem(noteId: String, itemId: String): NoteDto? {
+        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val current = _notesFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == noteId }
+        if (index == -1) return null
+
+        val existing = current[index]
+        val updatedChecklist = existing.checklist.map { item ->
+            if (item.id == itemId) item.copy(isDone = !item.isDone) else item
+        }
+        val updated = existing.copy(
+            checklist = updatedChecklist,
+            updatedAt = now
+        )
+        current[index] = updated
+        saveNotes(current)
+        return updated
+    }
+
+    private fun seedDefaultNotesData() {
+        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val defaultNotes = listOf(
+            NoteDto(
+                id = "note_welcome",
+                title = "Welcome to Notes & Documents",
+                content = "Capture ideas, quick checklists, project thoughts, or personal records. Pin important items so they stay right at the top of your dashboard!",
+                category = "Personal",
+                tags = listOf("welcome", "guide"),
+                isPinned = true,
+                colorHex = "#FEF3C7",
+                checklist = listOf(
+                    ChecklistItemDto(id = "chk_1", text = "Explore categories & colors", isDone = true),
+                    ChecklistItemDto(id = "chk_2", text = "Try pinning a priority note", isDone = true),
+                    ChecklistItemDto(id = "chk_3", text = "Create a custom checklist", isDone = false)
+                ),
+                createdAt = now,
+                updatedAt = now
+            ),
+            NoteDto(
+                id = "note_ideas",
+                title = "Project Innovation Concepts",
+                content = "- Offline-first data caching with real-time sync\n- Material Design 3 dynamic themes\n- Integrated dictionary with AI assistance\n- Smart packing baggage checklists",
+                category = "Ideas",
+                tags = listOf("tech", "architecture"),
+                isPinned = true,
+                colorHex = "#DBEAFE",
+                checklist = emptyList(),
+                createdAt = now,
+                updatedAt = now
+            ),
+            NoteDto(
+                id = "note_supplies",
+                title = "Weekend Home Restock",
+                content = "Pick up essentials during Saturday afternoon errand run.",
+                category = "Checklist",
+                tags = listOf("shopping", "home"),
+                isPinned = false,
+                colorHex = "#D1FAE5",
+                checklist = listOf(
+                    ChecklistItemDto(id = "chk_101", text = "Fresh fruits & vegetables", isDone = true),
+                    ChecklistItemDto(id = "chk_102", text = "Espresso blend beans", isDone = false),
+                    ChecklistItemDto(id = "chk_103", text = "Dishwashing liquid & sponges", isDone = false)
+                ),
+                createdAt = now,
+                updatedAt = now
+            ),
+            NoteDto(
+                id = "note_finance",
+                title = "Monthly Budget Checkpoint",
+                content = "Review total lent balances and upcoming repayment installments from the Loans tab before month end.",
+                category = "Finances",
+                tags = listOf("budget", "loans"),
+                isPinned = false,
+                colorHex = "#EDE9FE",
+                checklist = emptyList(),
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        saveNotes(defaultNotes)
+    }
+
     companion object {
         private const val KEY_TRANSACTIONS = "local_transactions_v1"
         private const val KEY_LOANS = "local_loans_v1"
         private const val KEY_WORDS = "local_words_v1"
         private const val KEY_LUGGAGE = "local_luggage_v1"
+        private const val KEY_NOTES = "local_notes_v1"
     }
 }

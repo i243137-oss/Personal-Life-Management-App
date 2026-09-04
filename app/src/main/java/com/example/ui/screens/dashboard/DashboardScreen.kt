@@ -169,7 +169,8 @@ fun DashboardScreen(
                     DashboardMetricsSection(
                         data = state.data,
                         formatCurrency = { dashboardViewModel.formatCurrency(it) },
-                        onLuggageClick = { onQuickActionClick("luggage") }
+                        onLuggageClick = { onQuickActionClick("luggage") },
+                        onNotesClick = { onQuickActionClick("add_note") }
                     )
                 }
 
@@ -259,6 +260,7 @@ fun DashboardMetricsSection(
     data: DashboardData,
     formatCurrency: (Double) -> String,
     onLuggageClick: () -> Unit = {},
+    onNotesClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -416,6 +418,66 @@ fun DashboardMetricsSection(
                                     "All items packed across ${data.activeLuggageTrips} trip(s)!",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (data.pendingPackingCount > 0) Color(0xFFD97706) else Color(0xFF059669)
+                            )
+                        }
+                    }
+
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // Phase 6: Notes & Documents Metric Banner
+        if (data.totalNotesCount > 0) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onNotesClick() }
+                    .testTag("dashboard_notes_summary_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EditNote,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Notes & Documents",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${data.totalNotesCount} note(s) saved (${data.pinnedNotesCount} pinned)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

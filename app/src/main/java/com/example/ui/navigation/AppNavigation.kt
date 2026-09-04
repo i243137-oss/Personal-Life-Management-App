@@ -47,6 +47,7 @@ import com.example.ui.screens.dictionary.DictionaryScreen
 import com.example.ui.screens.loans.LoansScreen
 import com.example.ui.screens.luggage.LuggageScreen
 import com.example.ui.screens.money.MoneyScreen
+import com.example.ui.screens.notes.NotesScreen
 import com.example.ui.screens.settings.SettingsScreen
 import com.example.ui.viewmodel.AuthViewModel
 import com.example.ui.viewmodel.DashboardViewModel
@@ -54,6 +55,7 @@ import com.example.ui.viewmodel.DictionaryViewModel
 import com.example.ui.viewmodel.LoanViewModel
 import com.example.ui.viewmodel.LuggageViewModel
 import com.example.ui.viewmodel.MoneyViewModel
+import com.example.ui.viewmodel.NoteViewModel
 import kotlinx.coroutines.launch
 
 enum class BottomNavDestination(
@@ -77,6 +79,7 @@ fun AppNavigation(
     loanViewModel: LoanViewModel,
     dictionaryViewModel: DictionaryViewModel,
     luggageViewModel: LuggageViewModel,
+    noteViewModel: NoteViewModel,
     modifier: Modifier = Modifier
 ) {
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
@@ -143,54 +146,61 @@ fun AppNavigation(
                     }
                 }
             ) { paddingValues ->
-                if (activeSubscreen == "dictionary") {
-                    DictionaryScreen(
-                        dictionaryViewModel = dictionaryViewModel,
-                        modifier = Modifier.padding(paddingValues)
-                    )
-                } else {
-                    BoxContent(
-                        currentTab = currentTab,
-                        authViewModel = authViewModel,
-                        dashboardViewModel = dashboardViewModel,
-                        moneyViewModel = moneyViewModel,
-                        loanViewModel = loanViewModel,
-                        dictionaryViewModel = dictionaryViewModel,
-                        luggageViewModel = luggageViewModel,
-                        currentUser = currentUser,
-                        onNavigateToDictionary = { activeSubscreen = "dictionary" },
-                        onNavigateToLuggage = {
-                            activeSubscreen = null
-                            currentTab = BottomNavDestination.LUGGAGE
-                        },
-                        onQuickActionClick = { actionKey ->
-                            when (actionKey) {
-                                "add_money", "add_expense" -> {
-                                    activeSubscreen = null
-                                    currentTab = BottomNavDestination.MONEY
-                                }
-                                "add_loan" -> {
-                                    activeSubscreen = null
-                                    currentTab = BottomNavDestination.LOANS
-                                }
-                                "luggage" -> {
-                                    activeSubscreen = null
-                                    currentTab = BottomNavDestination.LUGGAGE
-                                }
-                                "dictionary" -> {
-                                    activeSubscreen = "dictionary"
-                                }
-                                "add_note" -> {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            "Notes & Documents is scheduled for Phase 6!"
-                                        )
+                when (activeSubscreen) {
+                    "dictionary" -> {
+                        DictionaryScreen(
+                            dictionaryViewModel = dictionaryViewModel,
+                            modifier = Modifier.padding(paddingValues)
+                        )
+                    }
+                    "notes" -> {
+                        NotesScreen(
+                            viewModel = noteViewModel,
+                            onBack = { activeSubscreen = null },
+                            modifier = Modifier.padding(paddingValues)
+                        )
+                    }
+                    else -> {
+                        BoxContent(
+                            currentTab = currentTab,
+                            authViewModel = authViewModel,
+                            dashboardViewModel = dashboardViewModel,
+                            moneyViewModel = moneyViewModel,
+                            loanViewModel = loanViewModel,
+                            dictionaryViewModel = dictionaryViewModel,
+                            luggageViewModel = luggageViewModel,
+                            currentUser = currentUser,
+                            onNavigateToDictionary = { activeSubscreen = "dictionary" },
+                            onNavigateToLuggage = {
+                                activeSubscreen = null
+                                currentTab = BottomNavDestination.LUGGAGE
+                            },
+                            onNavigateToNotes = { activeSubscreen = "notes" },
+                            onQuickActionClick = { actionKey ->
+                                when (actionKey) {
+                                    "add_money", "add_expense" -> {
+                                        activeSubscreen = null
+                                        currentTab = BottomNavDestination.MONEY
+                                    }
+                                    "add_loan" -> {
+                                        activeSubscreen = null
+                                        currentTab = BottomNavDestination.LOANS
+                                    }
+                                    "luggage" -> {
+                                        activeSubscreen = null
+                                        currentTab = BottomNavDestination.LUGGAGE
+                                    }
+                                    "dictionary" -> {
+                                        activeSubscreen = "dictionary"
+                                    }
+                                    "add_note", "notes" -> {
+                                        activeSubscreen = "notes"
                                     }
                                 }
-                            }
-                        },
-                        modifier = Modifier.padding(paddingValues)
-                    )
+                            },
+                            modifier = Modifier.padding(paddingValues)
+                        )
+                    }
                 }
             }
         }
@@ -209,6 +219,7 @@ private fun BoxContent(
     currentUser: com.example.data.model.UserDto?,
     onNavigateToDictionary: () -> Unit,
     onNavigateToLuggage: () -> Unit,
+    onNavigateToNotes: () -> Unit,
     onQuickActionClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -245,6 +256,7 @@ private fun BoxContent(
                 currentUser = currentUser,
                 onNavigateToDictionary = onNavigateToDictionary,
                 onNavigateToLuggage = onNavigateToLuggage,
+                onNavigateToNotes = onNavigateToNotes,
                 modifier = modifier
             )
         }

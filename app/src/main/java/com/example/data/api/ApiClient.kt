@@ -121,4 +121,19 @@ class ApiClient(private val sessionManager: UserSessionManager) {
             .build()
             .create(LuggageApiService::class.java)
     }
+
+    fun getNoteApiService(customBaseUrl: String? = null): NoteApiService {
+        val baseUrl = customBaseUrl ?: runBlocking {
+            sessionManager.backendUrlFlow.firstOrNull()
+        } ?: UserSessionManager.DEFAULT_BACKEND_URL
+
+        val sanitizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+
+        return Retrofit.Builder()
+            .baseUrl(sanitizedBaseUrl)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(NoteApiService::class.java)
+    }
 }

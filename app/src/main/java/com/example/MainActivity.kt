@@ -14,9 +14,10 @@ import com.example.data.local.UserSessionManager
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.DashboardRepository
 import com.example.data.repository.DictionaryRepository
-import com.example.data.repository.LuggageRepository
-import com.example.data.repository.TransactionRepository
 import com.example.data.repository.LoanRepository
+import com.example.data.repository.LuggageRepository
+import com.example.data.repository.NoteRepository
+import com.example.data.repository.TransactionRepository
 import com.example.ui.navigation.AppNavigation
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.AuthViewModel
@@ -25,12 +26,14 @@ import com.example.ui.viewmodel.DashboardViewModel
 import com.example.ui.viewmodel.DashboardViewModelFactory
 import com.example.ui.viewmodel.DictionaryViewModel
 import com.example.ui.viewmodel.DictionaryViewModelFactory
+import com.example.ui.viewmodel.LoanViewModel
+import com.example.ui.viewmodel.LoanViewModelFactory
 import com.example.ui.viewmodel.LuggageViewModel
 import com.example.ui.viewmodel.LuggageViewModelFactory
 import com.example.ui.viewmodel.MoneyViewModel
 import com.example.ui.viewmodel.MoneyViewModelFactory
-import com.example.ui.viewmodel.LoanViewModel
-import com.example.ui.viewmodel.LoanViewModelFactory
+import com.example.ui.viewmodel.NoteViewModel
+import com.example.ui.viewmodel.NoteViewModelFactory
 
 class MainActivity : ComponentActivity() {
 
@@ -47,6 +50,7 @@ class MainActivity : ComponentActivity() {
         val loanRepository = LoanRepository(apiClient, localDataManager)
         val dictionaryRepository = DictionaryRepository(apiClient, localDataManager)
         val luggageRepository = LuggageRepository(apiClient, localDataManager)
+        val noteRepository = NoteRepository(apiClient, localDataManager)
 
         setContent {
             MyApplicationTheme {
@@ -99,13 +103,18 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
+                    val noteViewModel: NoteViewModel = viewModel(
+                        factory = remember { NoteViewModelFactory(noteRepository) }
+                    )
+
                     AppNavigation(
                         authViewModel = authViewModel,
                         dashboardViewModel = dashboardViewModel,
                         moneyViewModel = moneyViewModel,
                         loanViewModel = loanViewModel,
                         dictionaryViewModel = dictionaryViewModel,
-                        luggageViewModel = luggageViewModel
+                        luggageViewModel = luggageViewModel,
+                        noteViewModel = noteViewModel
                     )
                 }
             }

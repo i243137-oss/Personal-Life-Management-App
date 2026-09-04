@@ -64,6 +64,7 @@ fun SettingsScreen(
     currentUser: UserDto?,
     onNavigateToDictionary: (() -> Unit)? = null,
     onNavigateToLuggage: (() -> Unit)? = null,
+    onNavigateToNotes: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -248,10 +249,12 @@ fun SettingsScreen(
                     )
                 }
 
-                // Notes (Phase 6 - Upcoming)
+                // Notes (Phase 6)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onNavigateToNotes?.invoke() }
                         .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -278,22 +281,18 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
                             )
                             Text(
-                                text = "Personal notes & rich docs",
+                                text = "Personal notes, tasks & docs",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Text(
-                            text = "Phase 6",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
