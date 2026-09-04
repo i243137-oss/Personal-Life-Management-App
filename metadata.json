@@ -1,0 +1,6 @@
+{
+  "name": "Personal Life Manager",
+  "description": "Personal life management app with expenses, loans, dictionary, notes, luggage and cross-platform sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
