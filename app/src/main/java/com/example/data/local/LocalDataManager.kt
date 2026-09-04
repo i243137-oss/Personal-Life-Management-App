@@ -8,6 +8,12 @@ import com.example.data.model.DashboardData
 import com.example.data.model.ExpenseBreakdownItem
 import com.example.data.model.LoanDto
 import com.example.data.model.LoanSummaryData
+import com.example.data.model.LuggageItemDto
+import com.example.data.model.LuggageTripDto
+import com.example.data.model.CreateLuggageTripRequest
+import com.example.data.model.UpdateLuggageTripRequest
+import com.example.data.model.AddLuggageItemRequest
+import com.example.data.model.UpdateLuggageItemRequest
 import com.example.data.model.QuickPresetDto
 import com.example.data.model.RepaymentDto
 import com.example.data.model.TransactionDto
@@ -44,10 +50,13 @@ class LocalDataManager(context: Context) {
         Types.newParameterizedType(List::class.java, LoanDto::class.java)
     private val wordListType =
         Types.newParameterizedType(List::class.java, WordItemDto::class.java)
+    private val luggageListType =
+        Types.newParameterizedType(List::class.java, LuggageTripDto::class.java)
 
     private val transactionAdapter = moshi.adapter<List<TransactionDto>>(transactionListType)
     private val loanAdapter = moshi.adapter<List<LoanDto>>(loanListType)
     private val wordAdapter = moshi.adapter<List<WordItemDto>>(wordListType)
+    private val luggageAdapter = moshi.adapter<List<LuggageTripDto>>(luggageListType)
 
     private val _transactionsFlow = MutableStateFlow<List<TransactionDto>>(emptyList())
     val transactionsFlow: Flow<List<TransactionDto>> = _transactionsFlow.asStateFlow()
@@ -58,10 +67,16 @@ class LocalDataManager(context: Context) {
     private val _wordsFlow = MutableStateFlow<List<WordItemDto>>(emptyList())
     val wordsFlow: Flow<List<WordItemDto>> = _wordsFlow.asStateFlow()
 
+    private val _luggageTripsFlow = MutableStateFlow<List<LuggageTripDto>>(emptyList())
+    val luggageTripsFlow: Flow<List<LuggageTripDto>> = _luggageTripsFlow.asStateFlow()
+
     init {
         loadFromPrefs()
         if (_transactionsFlow.value.isEmpty() && _loansFlow.value.isEmpty()) {
             seedDefaultDemoData()
+        }
+        if (_luggageTripsFlow.value.isEmpty()) {
+            seedDefaultLuggageData()
         }
     }
 
@@ -92,6 +107,15 @@ class LocalDataManager(context: Context) {
             } catch (_: Exception) {
             }
         }
+
+        val luggageJson = prefs.getString(KEY_LUGGAGE, null)
+        if (!luggageJson.isNullOrBlank()) {
+            try {
+                val list = luggageAdapter.fromJson(luggageJson) ?: emptyList()
+                _luggageTripsFlow.value = list
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun saveTransactions(list: List<TransactionDto>) {
@@ -119,6 +143,16 @@ class LocalDataManager(context: Context) {
         try {
             val json = wordAdapter.toJson(list)
             prefs.edit().putString(KEY_WORDS, json).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun saveLuggage(list: List<LuggageTripDto>) {
+        _luggageTripsFlow.value = list
+        try {
+            val json = luggageAdapter.toJson(list)
+            prefs.edit().putString(KEY_LUGGAGE, json).apply()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -567,11 +601,20 @@ class LocalDataManager(context: Context) {
             }
         }
 
+        val luggageTrips = _luggageTripsFlow.value
+        val activeLuggageTrips = luggageTrips.size
+        var pendingPackingCount = 0
+        luggageTrips.forEach { trip ->
+            pendingPackingCount += trip.items.count { !it.isPacked }
+        }
+
         return DashboardData(
             currentBalance = currentBalance,
             todayExpenses = todayExpenses,
             youOwe = youOwe,
             othersOwe = othersOwe,
+            activeLuggageTrips = activeLuggageTrips,
+            pendingPackingCount = pendingPackingCount,
             recentActivity = txs.take(5)
         )
     }
@@ -868,9 +911,269 @@ class LocalDataManager(context: Context) {
         )
     }
 
+    // --- Phase 5: Luggage & Travel Packing Methods ---
+
+    fun getLuggageTrips(): List<LuggageTripDto> {
+        return _luggageTripsFlow.value
+    }
+
+    fun getLuggageTripById(id: String): LuggageTripDto? {
+        return _luggageTripsFlow.value.find { it.id == id }
+    }
+
+    fun setLuggageTrips(trips: List<LuggageTripDto>) {
+        saveLuggage(trips.map { enrichLocalTrip(it) })
+    }
+
+    fun createLuggageTrip(req: CreateLuggageTripRequest): LuggageTripDto {
+        val newTrip = LuggageTripDto(
+            id = "local_trip_${UUID.randomUUID().toString().take(8)}",
+            title = req.title,
+            destination = req.destination,
+            bagType = req.bagType,
+            departureDate = req.departureDate.ifBlank { null },
+            returnDate = req.returnDate.ifBlank { null },
+            maxWeightKg = req.maxWeightKg,
+            colorHex = req.colorHex,
+            items = emptyList(),
+            createdAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        )
+        val enriched = enrichLocalTrip(newTrip)
+        val current = _luggageTripsFlow.value.toMutableList()
+        current.add(0, enriched)
+        saveLuggage(current)
+        return enriched
+    }
+
+    fun updateLuggageTrip(id: String, req: UpdateLuggageTripRequest): LuggageTripDto? {
+        val current = _luggageTripsFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == id }
+        if (index == -1) return null
+
+        val old = current[index]
+        val updated = old.copy(
+            title = req.title ?: old.title,
+            destination = req.destination ?: old.destination,
+            bagType = req.bagType ?: old.bagType,
+            departureDate = req.departureDate ?: old.departureDate,
+            returnDate = req.returnDate ?: old.returnDate,
+            maxWeightKg = req.maxWeightKg ?: old.maxWeightKg,
+            colorHex = req.colorHex ?: old.colorHex,
+            updatedAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        )
+        val enriched = enrichLocalTrip(updated)
+        current[index] = enriched
+        saveLuggage(current)
+        return enriched
+    }
+
+    fun deleteLuggageTrip(id: String): Boolean {
+        val current = _luggageTripsFlow.value.toMutableList()
+        val removed = current.removeAll { it.id == id }
+        if (removed) {
+            saveLuggage(current)
+        }
+        return removed
+    }
+
+    fun addLuggageItem(tripId: String, req: AddLuggageItemRequest): LuggageTripDto? {
+        val current = _luggageTripsFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == tripId }
+        if (index == -1) return null
+
+        val old = current[index]
+        val newItem = LuggageItemDto(
+            id = "item_${UUID.randomUUID().toString().take(8)}",
+            name = req.name,
+            category = req.category,
+            quantity = req.quantity,
+            isPacked = req.isPacked,
+            isEssential = req.isEssential,
+            weightKg = req.weightKg,
+            notes = req.notes
+        )
+        val updatedItems = old.items.toMutableList().apply { add(newItem) }
+        val updatedTrip = enrichLocalTrip(old.copy(items = updatedItems))
+        current[index] = updatedTrip
+        saveLuggage(current)
+        return updatedTrip
+    }
+
+    fun toggleLuggageItem(tripId: String, itemId: String): LuggageTripDto? {
+        val current = _luggageTripsFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == tripId }
+        if (index == -1) return null
+
+        val old = current[index]
+        val updatedItems = old.items.map { item ->
+            if (item.id == itemId) item.copy(isPacked = !item.isPacked) else item
+        }
+        val updatedTrip = enrichLocalTrip(old.copy(items = updatedItems))
+        current[index] = updatedTrip
+        saveLuggage(current)
+        return updatedTrip
+    }
+
+    fun updateLuggageItem(tripId: String, itemId: String, req: UpdateLuggageItemRequest): LuggageTripDto? {
+        val current = _luggageTripsFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == tripId }
+        if (index == -1) return null
+
+        val old = current[index]
+        val updatedItems = old.items.map { item ->
+            if (item.id == itemId) {
+                item.copy(
+                    name = req.name ?: item.name,
+                    category = req.category ?: item.category,
+                    quantity = req.quantity ?: item.quantity,
+                    isPacked = req.isPacked ?: item.isPacked,
+                    isEssential = req.isEssential ?: item.isEssential,
+                    weightKg = req.weightKg ?: item.weightKg,
+                    notes = req.notes ?: item.notes
+                )
+            } else {
+                item
+            }
+        }
+        val updatedTrip = enrichLocalTrip(old.copy(items = updatedItems))
+        current[index] = updatedTrip
+        saveLuggage(current)
+        return updatedTrip
+    }
+
+    fun deleteLuggageItem(tripId: String, itemId: String): LuggageTripDto? {
+        val current = _luggageTripsFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == tripId }
+        if (index == -1) return null
+
+        val old = current[index]
+        val updatedItems = old.items.filter { it.id != itemId }
+        val updatedTrip = enrichLocalTrip(old.copy(items = updatedItems))
+        current[index] = updatedTrip
+        saveLuggage(current)
+        return updatedTrip
+    }
+
+    fun applyLuggageTemplate(tripId: String, templateKey: String): LuggageTripDto? {
+        val current = _luggageTripsFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == tripId }
+        if (index == -1) return null
+
+        val templateItems = when (templateKey.lowercase()) {
+            "weekend" -> listOf(
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Casual T-Shirts (3)", category = "Clothing", quantity = 3, isEssential = true, weightKg = 0.6),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Jeans / Pants (2)", category = "Clothing", quantity = 2, isEssential = true, weightKg = 1.0),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Underwear & Socks", category = "Clothing", quantity = 3, isEssential = true, weightKg = 0.3),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Toothbrush & Paste", category = "Toiletries", quantity = 1, isEssential = true, weightKg = 0.2),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Phone Fast Charger", category = "Electronics", quantity = 1, isEssential = true, weightKg = 0.15),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Power Bank 10,000mAh", category = "Electronics", quantity = 1, isEssential = true, weightKg = 0.3),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "CNIC / ID Card", category = "Documents", quantity = 1, isEssential = true, weightKg = 0.05),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Emergency Cash & Cards", category = "Valuables", quantity = 1, isEssential = true, weightKg = 0.05)
+            )
+            "international" -> listOf(
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Passport & Visa Copies", category = "Documents", quantity = 1, isEssential = true, weightKg = 0.1),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Flight Boarding Pass", category = "Documents", quantity = 1, isEssential = true, weightKg = 0.05),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Universal Travel Adapter", category = "Electronics", quantity = 1, isEssential = true, weightKg = 0.2),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Noise-Canceling Headphones", category = "Electronics", quantity = 1, isEssential = false, weightKg = 0.35),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Prescription Meds & First Aid", category = "Medication", quantity = 1, isEssential = true, weightKg = 0.3),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Clear Toiletries Pouch (<100ml)", category = "Toiletries", quantity = 1, isEssential = true, weightKg = 0.5),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Formal Outfits & Suits", category = "Clothing", quantity = 4, isEssential = true, weightKg = 2.4),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Travel Neck Pillow", category = "Other", quantity = 1, isEssential = false, weightKg = 0.25)
+            )
+            "tech" -> listOf(
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Laptop & 100W Charger", category = "Electronics", quantity = 1, isEssential = true, weightKg = 1.8),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Backup Smartphone & Cables", category = "Electronics", quantity = 2, isEssential = true, weightKg = 0.4),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Wireless Mouse & Pad", category = "Electronics", quantity = 1, isEssential = false, weightKg = 0.2),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Pocket Notebook & Pen", category = "Other", quantity = 1, isEssential = true, weightKg = 0.2),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Office Access Token", category = "Valuables", quantity = 1, isEssential = true, weightKg = 0.05),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Insulated Water Tumbler", category = "Other", quantity = 1, isEssential = false, weightKg = 0.4)
+            )
+            "hiking" -> listOf(
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Trekking Boots & Socks", category = "Clothing", quantity = 2, isEssential = true, weightKg = 1.5),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Waterproof Windbreaker Jacket", category = "Clothing", quantity = 1, isEssential = true, weightKg = 0.6),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Wilderness First Aid & Bandages", category = "Medication", quantity = 1, isEssential = true, weightKg = 0.4),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Headlamp & Extra Batteries", category = "Electronics", quantity = 1, isEssential = true, weightKg = 0.3),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Electrolyte Packs & Trail Mix", category = "Other", quantity = 4, isEssential = true, weightKg = 0.4),
+                LuggageItemDto(id = "tpl_${UUID.randomUUID().toString().take(6)}", name = "Sunblock & Bug Spray", category = "Toiletries", quantity = 1, isEssential = true, weightKg = 0.25)
+            )
+            else -> emptyList()
+        }
+
+        if (templateItems.isEmpty()) return null
+
+        val old = current[index]
+        val updatedItems = old.items.toMutableList().apply { addAll(templateItems) }
+        val updatedTrip = enrichLocalTrip(old.copy(items = updatedItems))
+        current[index] = updatedTrip
+        saveLuggage(current)
+        return updatedTrip
+    }
+
+    private fun enrichLocalTrip(trip: LuggageTripDto): LuggageTripDto {
+        val total = trip.items.size
+        val packed = trip.items.count { it.isPacked }
+        val totalWeight = trip.items.sumOf { it.weightKg * it.quantity }
+        val packedWeight = trip.items.filter { it.isPacked }.sumOf { it.weightKg * it.quantity }
+        val roundedTotalWeight = Math.round(totalWeight * 100.0) / 100.0
+        val roundedPackedWeight = Math.round(packedWeight * 100.0) / 100.0
+        val isExceeded = trip.maxWeightKg > 0 && roundedTotalWeight > trip.maxWeightKg
+
+        return trip.copy(
+            totalItems = total,
+            packedItems = packed,
+            totalWeightKg = roundedTotalWeight,
+            packedWeightKg = roundedPackedWeight,
+            isWeightExceeded = isExceeded
+        )
+    }
+
+    private fun seedDefaultLuggageData() {
+        val trip1 = LuggageTripDto(
+            id = "trip_dubai_demo",
+            title = "Dubai Tech Summit",
+            destination = "Dubai, UAE",
+            bagType = "Cabin Bag",
+            departureDate = "2026-10-15",
+            returnDate = "2026-10-20",
+            maxWeightKg = 7.0,
+            colorHex = "#2563EB",
+            items = listOf(
+                LuggageItemDto(id = "it_1", name = "Passport & Visa Copies", category = "Documents", quantity = 1, isPacked = true, isEssential = true, weightKg = 0.1),
+                LuggageItemDto(id = "it_2", name = "MacBook Pro & Charger", category = "Electronics", quantity = 1, isPacked = true, isEssential = true, weightKg = 1.8),
+                LuggageItemDto(id = "it_3", name = "Formal Business Shirts (3)", category = "Clothing", quantity = 3, isPacked = false, isEssential = true, weightKg = 0.75),
+                LuggageItemDto(id = "it_4", name = "Universal Travel Adapter", category = "Electronics", quantity = 1, isPacked = false, isEssential = true, weightKg = 0.2),
+                LuggageItemDto(id = "it_5", name = "Clear Toiletries Pouch", category = "Toiletries", quantity = 1, isPacked = false, isEssential = false, weightKg = 0.4),
+                LuggageItemDto(id = "it_6", name = "Prescription Meds", category = "Medication", quantity = 1, isPacked = false, isEssential = true, weightKg = 0.15)
+            )
+        )
+
+        val trip2 = LuggageTripDto(
+            id = "trip_hunza_demo",
+            title = "Northern Road Trip",
+            destination = "Hunza & Skardu",
+            bagType = "Backpack",
+            departureDate = "2026-11-05",
+            returnDate = "2026-11-12",
+            maxWeightKg = 12.0,
+            colorHex = "#059669",
+            items = listOf(
+                LuggageItemDto(id = "it_201", name = "Thermal Jacket & Windbreaker", category = "Clothing", quantity = 1, isPacked = true, isEssential = true, weightKg = 1.2),
+                LuggageItemDto(id = "it_202", name = "Trekking Boots", category = "Clothing", quantity = 1, isPacked = true, isEssential = true, weightKg = 1.4),
+                LuggageItemDto(id = "it_203", name = "Power Bank 20,000mAh", category = "Electronics", quantity = 2, isPacked = false, isEssential = true, weightKg = 0.7),
+                LuggageItemDto(id = "it_204", name = "First Aid Kit & Bandages", category = "Medication", quantity = 1, isPacked = true, isEssential = true, weightKg = 0.4),
+                LuggageItemDto(id = "it_205", name = "CNIC & Vehicle Reg Copies", category = "Documents", quantity = 1, isPacked = false, isEssential = true, weightKg = 0.05),
+                LuggageItemDto(id = "it_206", name = "Thermos Flask", category = "Other", quantity = 1, isPacked = false, isEssential = false, weightKg = 0.5)
+            )
+        )
+
+        val seeded = listOf(enrichLocalTrip(trip1), enrichLocalTrip(trip2))
+        saveLuggage(seeded)
+    }
+
     companion object {
         private const val KEY_TRANSACTIONS = "local_transactions_v1"
         private const val KEY_LOANS = "local_loans_v1"
         private const val KEY_WORDS = "local_words_v1"
+        private const val KEY_LUGGAGE = "local_luggage_v1"
     }
 }

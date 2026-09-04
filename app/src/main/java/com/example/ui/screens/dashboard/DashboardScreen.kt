@@ -168,7 +168,8 @@ fun DashboardScreen(
                 item {
                     DashboardMetricsSection(
                         data = state.data,
-                        formatCurrency = { dashboardViewModel.formatCurrency(it) }
+                        formatCurrency = { dashboardViewModel.formatCurrency(it) },
+                        onLuggageClick = { onQuickActionClick("luggage") }
                     )
                 }
 
@@ -257,6 +258,7 @@ fun DashboardScreen(
 fun DashboardMetricsSection(
     data: DashboardData,
     formatCurrency: (Double) -> String,
+    onLuggageClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -360,6 +362,72 @@ fun DashboardMetricsSection(
                 icon = Icons.Default.ArrowUpward,
                 modifier = Modifier.weight(1f)
             )
+        }
+
+        // Travel Packing Summary Banner (Phase 5)
+        if (data.activeLuggageTrips > 0) {
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onLuggageClick() }
+                    .testTag("dashboard_luggage_summary_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF059669).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Luggage,
+                                contentDescription = null,
+                                tint = Color(0xFF059669),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Travel Packing",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (data.pendingPackingCount > 0)
+                                    "${data.pendingPackingCount} items pending across ${data.activeLuggageTrips} trip(s)"
+                                else
+                                    "All items packed across ${data.activeLuggageTrips} trip(s)!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (data.pendingPackingCount > 0) Color(0xFFD97706) else Color(0xFF059669)
+                            )
+                        }
+                    }
+
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }

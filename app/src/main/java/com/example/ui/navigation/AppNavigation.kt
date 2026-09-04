@@ -1,5 +1,6 @@
 package com.example.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,13 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Luggage
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Paid
 import androidx.compose.material3.Icon
@@ -43,15 +44,16 @@ import com.example.ui.screens.auth.LoginScreen
 import com.example.ui.screens.auth.RegisterScreen
 import com.example.ui.screens.dashboard.DashboardScreen
 import com.example.ui.screens.dictionary.DictionaryScreen
-import com.example.ui.screens.money.MoneyScreen
 import com.example.ui.screens.loans.LoansScreen
-import com.example.ui.screens.placeholder.PhasePlaceholderScreen
+import com.example.ui.screens.luggage.LuggageScreen
+import com.example.ui.screens.money.MoneyScreen
 import com.example.ui.screens.settings.SettingsScreen
 import com.example.ui.viewmodel.AuthViewModel
 import com.example.ui.viewmodel.DashboardViewModel
 import com.example.ui.viewmodel.DictionaryViewModel
-import com.example.ui.viewmodel.MoneyViewModel
 import com.example.ui.viewmodel.LoanViewModel
+import com.example.ui.viewmodel.LuggageViewModel
+import com.example.ui.viewmodel.MoneyViewModel
 import kotlinx.coroutines.launch
 
 enum class BottomNavDestination(
@@ -63,7 +65,7 @@ enum class BottomNavDestination(
     HOME("Home", Icons.Filled.Home, Icons.Outlined.Home, "nav_home"),
     MONEY("Money", Icons.Filled.AccountBalanceWallet, Icons.Outlined.AccountBalanceWallet, "nav_money"),
     LOANS("Loans", Icons.Filled.Paid, Icons.Outlined.Paid, "nav_loans"),
-    DICTIONARY("Dictionary", Icons.Filled.Book, Icons.Outlined.Book, "nav_dictionary"),
+    LUGGAGE("Luggage", Icons.Filled.Luggage, Icons.Outlined.Luggage, "nav_luggage"),
     MORE("More", Icons.Filled.MoreHoriz, Icons.Outlined.MoreHoriz, "nav_more")
 }
 
@@ -74,14 +76,20 @@ fun AppNavigation(
     moneyViewModel: MoneyViewModel,
     loanViewModel: LoanViewModel,
     dictionaryViewModel: DictionaryViewModel,
+    luggageViewModel: LuggageViewModel,
     modifier: Modifier = Modifier
 ) {
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
     var isRegisterMode by remember { mutableStateOf(false) }
     var currentTab by remember { mutableStateOf(BottomNavDestination.HOME) }
+    var activeSubscreen by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    BackHandler(enabled = activeSubscreen != null) {
+        activeSubscreen = null
+    }
 
     AnimatedContent(
         targetState = isLoggedIn,
@@ -115,10 +123,13 @@ fun AppNavigation(
                         tonalElevation = 4.dp
                     ) {
                         BottomNavDestination.values().forEach { destination ->
-                            val selected = currentTab == destination
+                            val selected = activeSubscreen == null && currentTab == destination
                             NavigationBarItem(
                                 selected = selected,
-                                onClick = { currentTab = destination },
+                                onClick = {
+                                    activeSubscreen = null
+                                    currentTab = destination
+                                },
                                 icon = {
                                     Icon(
                                         imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
@@ -132,31 +143,55 @@ fun AppNavigation(
                     }
                 }
             ) { paddingValues ->
-                BoxContent(
-                    currentTab = currentTab,
-                    authViewModel = authViewModel,
-                    dashboardViewModel = dashboardViewModel,
-                    moneyViewModel = moneyViewModel,
-                    loanViewModel = loanViewModel,
-                    dictionaryViewModel = dictionaryViewModel,
-                    currentUser = currentUser,
-                    onQuickActionClick = { actionKey ->
-                        when (actionKey) {
-                            "add_money", "add_expense" -> currentTab = BottomNavDestination.MONEY
-                            "add_loan" -> currentTab = BottomNavDestination.LOANS
-                            "dictionary" -> currentTab = BottomNavDestination.DICTIONARY
-                            "add_note", "luggage" -> {
-                                currentTab = BottomNavDestination.MORE
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        "Feature scheduled for upcoming phase (Luggage: Phase 5, Notes: Phase 6)"
-                                    )
+                if (activeSubscreen == "dictionary") {
+                    DictionaryScreen(
+                        dictionaryViewModel = dictionaryViewModel,
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                } else {
+                    BoxContent(
+                        currentTab = currentTab,
+                        authViewModel = authViewModel,
+                        dashboardViewModel = dashboardViewModel,
+                        moneyViewModel = moneyViewModel,
+                        loanViewModel = loanViewModel,
+                        dictionaryViewModel = dictionaryViewModel,
+                        luggageViewModel = luggageViewModel,
+                        currentUser = currentUser,
+                        onNavigateToDictionary = { activeSubscreen = "dictionary" },
+                        onNavigateToLuggage = {
+                            activeSubscreen = null
+                            currentTab = BottomNavDestination.LUGGAGE
+                        },
+                        onQuickActionClick = { actionKey ->
+                            when (actionKey) {
+                                "add_money", "add_expense" -> {
+                                    activeSubscreen = null
+                                    currentTab = BottomNavDestination.MONEY
+                                }
+                                "add_loan" -> {
+                                    activeSubscreen = null
+                                    currentTab = BottomNavDestination.LOANS
+                                }
+                                "luggage" -> {
+                                    activeSubscreen = null
+                                    currentTab = BottomNavDestination.LUGGAGE
+                                }
+                                "dictionary" -> {
+                                    activeSubscreen = "dictionary"
+                                }
+                                "add_note" -> {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "Notes & Documents is scheduled for Phase 6!"
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    },
-                    modifier = Modifier.padding(paddingValues)
-                )
+                        },
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
             }
         }
     }
@@ -170,7 +205,10 @@ private fun BoxContent(
     moneyViewModel: MoneyViewModel,
     loanViewModel: LoanViewModel,
     dictionaryViewModel: DictionaryViewModel,
+    luggageViewModel: LuggageViewModel,
     currentUser: com.example.data.model.UserDto?,
+    onNavigateToDictionary: () -> Unit,
+    onNavigateToLuggage: () -> Unit,
     onQuickActionClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -195,9 +233,9 @@ private fun BoxContent(
                 modifier = modifier
             )
         }
-        BottomNavDestination.DICTIONARY -> {
-            DictionaryScreen(
-                dictionaryViewModel = dictionaryViewModel,
+        BottomNavDestination.LUGGAGE -> {
+            LuggageScreen(
+                luggageViewModel = luggageViewModel,
                 modifier = modifier
             )
         }
@@ -205,13 +243,10 @@ private fun BoxContent(
             SettingsScreen(
                 authViewModel = authViewModel,
                 currentUser = currentUser,
+                onNavigateToDictionary = onNavigateToDictionary,
+                onNavigateToLuggage = onNavigateToLuggage,
                 modifier = modifier
             )
         }
     }
-}
-
-@Composable
-private fun rememberSnackbarHostState(): SnackbarHostState {
-    return remember { SnackbarHostState() }
 }

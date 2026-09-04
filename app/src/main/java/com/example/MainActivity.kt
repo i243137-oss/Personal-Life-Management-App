@@ -14,6 +14,7 @@ import com.example.data.local.UserSessionManager
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.DashboardRepository
 import com.example.data.repository.DictionaryRepository
+import com.example.data.repository.LuggageRepository
 import com.example.data.repository.TransactionRepository
 import com.example.data.repository.LoanRepository
 import com.example.ui.navigation.AppNavigation
@@ -24,6 +25,8 @@ import com.example.ui.viewmodel.DashboardViewModel
 import com.example.ui.viewmodel.DashboardViewModelFactory
 import com.example.ui.viewmodel.DictionaryViewModel
 import com.example.ui.viewmodel.DictionaryViewModelFactory
+import com.example.ui.viewmodel.LuggageViewModel
+import com.example.ui.viewmodel.LuggageViewModelFactory
 import com.example.ui.viewmodel.MoneyViewModel
 import com.example.ui.viewmodel.MoneyViewModelFactory
 import com.example.ui.viewmodel.LoanViewModel
@@ -43,6 +46,7 @@ class MainActivity : ComponentActivity() {
         val transactionRepository = TransactionRepository(apiClient, localDataManager)
         val loanRepository = LoanRepository(apiClient, localDataManager)
         val dictionaryRepository = DictionaryRepository(apiClient, localDataManager)
+        val luggageRepository = LuggageRepository(apiClient, localDataManager)
 
         setContent {
             MyApplicationTheme {
@@ -84,12 +88,24 @@ class MainActivity : ComponentActivity() {
                         factory = remember { DictionaryViewModelFactory(dictionaryRepository) }
                     )
 
+                    val luggageViewModel: LuggageViewModel = viewModel(
+                        factory = remember {
+                            LuggageViewModelFactory(
+                                luggageRepository = luggageRepository,
+                                onDataChangedCallback = {
+                                    dashboardViewModel.loadDashboard()
+                                }
+                            )
+                        }
+                    )
+
                     AppNavigation(
                         authViewModel = authViewModel,
                         dashboardViewModel = dashboardViewModel,
                         moneyViewModel = moneyViewModel,
                         loanViewModel = loanViewModel,
-                        dictionaryViewModel = dictionaryViewModel
+                        dictionaryViewModel = dictionaryViewModel,
+                        luggageViewModel = luggageViewModel
                     )
                 }
             }

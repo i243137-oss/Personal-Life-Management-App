@@ -9,6 +9,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const loanRoutes = require('./routes/loanRoutes');
 const dictionaryRoutes = require('./routes/dictionaryRoutes');
+const luggageRoutes = require('./routes/luggageRoutes');
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/loans', loanRoutes);
 app.use('/api/dictionary', dictionaryRoutes);
+app.use('/api/luggage', luggageRoutes);
 
 // 404 handler
 app.use((req, res) => {

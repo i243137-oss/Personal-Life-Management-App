@@ -1,5 +1,6 @@
 const Transaction = require('../models/Transaction');
 const Loan = require('../models/Loan');
+const Luggage = require('../models/Luggage');
 
 // @desc    Get dashboard summary for authenticated user
 // @route   GET /api/dashboard/summary
@@ -60,6 +61,20 @@ const getDashboardSummary = async (req, res) => {
       console.warn('Could not query loans for dashboard:', loanErr.message);
     }
 
+    // Compute luggage metrics
+    let activeLuggageTrips = 0;
+    let pendingPackingCount = 0;
+    try {
+      const allTrips = await Luggage.find({ userId });
+      activeLuggageTrips = allTrips.length;
+      for (const t of allTrips) {
+        const items = t.items || [];
+        pendingPackingCount += items.filter((i) => !i.isPacked).length;
+      }
+    } catch (luggageErr) {
+      console.warn('Could not query luggage for dashboard:', luggageErr.message);
+    }
+
     // Format recent activity
     const recentActivity = transactions.map((t) => ({
       id: t._id,
@@ -77,6 +92,8 @@ const getDashboardSummary = async (req, res) => {
         todayExpenses,
         youOwe,
         othersOwe,
+        activeLuggageTrips,
+        pendingPackingCount,
         recentActivity,
       },
     });

@@ -106,4 +106,19 @@ class ApiClient(private val sessionManager: UserSessionManager) {
             .build()
             .create(DictionaryApiService::class.java)
     }
+
+    fun getLuggageApiService(customBaseUrl: String? = null): LuggageApiService {
+        val baseUrl = customBaseUrl ?: runBlocking {
+            sessionManager.backendUrlFlow.firstOrNull()
+        } ?: UserSessionManager.DEFAULT_BACKEND_URL
+
+        val sanitizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+
+        return Retrofit.Builder()
+            .baseUrl(sanitizedBaseUrl)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(LuggageApiService::class.java)
+    }
 }
