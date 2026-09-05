@@ -508,3 +508,27 @@ exports.testGemini = async (req, res) => {
   request.end();
 };
 
+// Get Vocabulary Summary Stats
+exports.getVocabularyStats = async (req, res) => {
+  try {
+    const total = await Word.countDocuments({ userId: req.user.id });
+    const mastered = await Word.countDocuments({ userId: req.user.id, masteryStatus: 'mastered' });
+    const reviewing = await Word.countDocuments({ userId: req.user.id, masteryStatus: 'reviewing' });
+    const learning = await Word.countDocuments({ userId: req.user.id, masteryStatus: 'learning' });
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        mastered,
+        reviewing,
+        learning,
+        masteryPercentage: total > 0 ? Math.round((mastered / total) * 100) : 0
+      }
+    });
+  } catch (error) {
+    console.error('Error getting vocabulary stats:', error);
+    res.status(500).json({ success: false, message: error.message || 'Error getting vocabulary stats' });
+  }
+};
+
