@@ -19,8 +19,9 @@ import java.util.concurrent.TimeUnit
 class GeminiDictionaryService {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -119,18 +120,18 @@ class GeminiDictionaryService {
             val resultJson = JSONObject(cleanedJson)
 
             val parsed = WordLookupResult(
-                word = resultJson.optString("word", word),
+                word = optNullableString(resultJson, "word") ?: word,
                 mode = mode,
-                phonetic = resultJson.optString("phonetic", null),
-                partOfSpeech = resultJson.optString("partOfSpeech", null),
-                shortDefinition = resultJson.optString("shortDefinition", null),
-                fullDefinition = resultJson.optString("fullDefinition", null),
+                phonetic = optNullableString(resultJson, "phonetic"),
+                partOfSpeech = optNullableString(resultJson, "partOfSpeech"),
+                shortDefinition = optNullableString(resultJson, "shortDefinition"),
+                fullDefinition = optNullableString(resultJson, "fullDefinition"),
                 synonyms = jsonArrayToList(resultJson.optJSONArray("synonyms")),
                 antonyms = jsonArrayToList(resultJson.optJSONArray("antonyms")),
                 examples = jsonArrayToList(resultJson.optJSONArray("examples")),
                 keyPoints = jsonArrayToList(resultJson.optJSONArray("keyPoints")),
-                eli5Analogy = resultJson.optString("eli5Analogy", null),
-                keyTakeaway = resultJson.optString("keyTakeaway", null),
+                eli5Analogy = optNullableString(resultJson, "eli5Analogy"),
+                keyTakeaway = optNullableString(resultJson, "keyTakeaway"),
                 isSaved = false,
                 savedWordId = null,
                 masteryStatus = null
@@ -140,6 +141,12 @@ class GeminiDictionaryService {
         } catch (e: Exception) {
             Result.failure(Exception("Please connect to internet"))
         }
+    }
+
+    private fun optNullableString(json: JSONObject, key: String): String? {
+        if (!json.has(key) || json.isNull(key)) return null
+        val v = json.optString(key)
+        return if (v.isNotBlank()) v else null
     }
 
     private fun jsonArrayToList(array: JSONArray?): List<String> {
