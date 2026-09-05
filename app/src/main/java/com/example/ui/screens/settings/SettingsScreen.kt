@@ -68,9 +68,6 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showServerDialog by remember { mutableStateOf(false) }
-    val currentBackendUrl by authViewModel.backendUrl.collectAsState()
-    var tempBackendUrl by remember(currentBackendUrl) { mutableStateOf(currentBackendUrl) }
 
     Column(
         modifier = modifier
@@ -322,42 +319,6 @@ fun SettingsScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Dns,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Backend Server URL",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = currentBackendUrl.ifBlank { "https://personal-life-management-app.onrender.com/" },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    TextButton(
-                        onClick = {
-                            tempBackendUrl = currentBackendUrl.ifBlank { "https://personal-life-management-app.onrender.com/" }
-                            showServerDialog = true
-                        },
-                        modifier = Modifier.testTag("settings_edit_server_url")
-                    ) {
-                        Text("Change")
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
                             imageVector = Icons.Default.CurrencyExchange,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
@@ -474,45 +435,6 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    if (showServerDialog) {
-        AlertDialog(
-            onDismissRequest = { showServerDialog = false },
-            title = { Text("Backend Server URL") },
-            text = {
-                Column {
-                    Text(
-                        text = "Enter your backend server base URL. Default is https://personal-life-management-app.onrender.com/.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = tempBackendUrl,
-                        onValueChange = { tempBackendUrl = it },
-                        label = { Text("Base URL") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        authViewModel.updateBackendUrl(tempBackendUrl)
-                        showServerDialog = false
-                    }
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showServerDialog = false }) {
                     Text("Cancel")
                 }
             }

@@ -39,8 +39,7 @@ class AuthRepository(
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            val message = e.localizedMessage ?: "Unable to connect to server: https://personal-life-management-app.onrender.com"
-            Result.failure(Exception(message))
+            Result.failure(Exception("Unable to connect to server. Please check your internet connection."))
         }
     }
 
@@ -62,8 +61,7 @@ class AuthRepository(
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            val message = e.localizedMessage ?: "Unable to connect to server: https://personal-life-management-app.onrender.com"
-            Result.failure(Exception(message))
+            Result.failure(Exception("Unable to connect to server. Please check your internet connection."))
         }
     }
 

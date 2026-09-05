@@ -32,8 +32,8 @@ class GeminiDictionaryService {
             ""
         }
 
-        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY" || apiKey == "undefined") {
-            return@withContext Result.failure(IllegalStateException("No valid Gemini API key configured"))
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY" || apiKey == "undefined" || apiKey == "your_api_key_here") {
+            return@withContext Result.failure(IllegalStateException("Please connect to internet"))
         }
 
         val prompt = if (mode == "explain") {
@@ -96,7 +96,7 @@ class GeminiDictionaryService {
             val responseBody = response.body?.string() ?: ""
 
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("Gemini API Error ${response.code}: $responseBody"))
+                return@withContext Result.failure(Exception("Please connect to internet"))
             }
 
             val rootJson = JSONObject(responseBody)
@@ -107,7 +107,7 @@ class GeminiDictionaryService {
             val text = parts?.optJSONObject(0)?.optString("text") ?: ""
 
             if (text.isBlank()) {
-                return@withContext Result.failure(Exception("Empty response from Gemini"))
+                return@withContext Result.failure(Exception("Please connect to internet"))
             }
 
             // Clean up any markdown wrapping if the model returned backticks
@@ -138,7 +138,7 @@ class GeminiDictionaryService {
 
             Result.success(parsed)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception("Please connect to internet"))
         }
     }
 

@@ -106,7 +106,8 @@ class DictionaryViewModel(
                     _uiState.update {
                         it.copy(
                             isLookingUp = false,
-                            lookupError = err.message ?: "Failed to look up definition"
+                            lookupResult = null,
+                            lookupError = err.message?.takeIf { msg -> msg.isNotBlank() } ?: "Please connect to internet"
                         )
                     }
                 }

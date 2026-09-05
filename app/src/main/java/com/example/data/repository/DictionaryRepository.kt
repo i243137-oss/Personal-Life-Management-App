@@ -20,27 +20,7 @@ class DictionaryRepository(
     val learnedWordsFlow: Flow<List<WordItemDto>> = localDataManager.wordsFlow
 
     suspend fun lookupWord(word: String, mode: String = "meaning"): Result<WordLookupResult> {
-        // 1. Try Backend Dictionary API
-        try {
-            val api = apiClient.getDictionaryApiService()
-            val response = api.lookupWord(LookupWordRequest(word = word, mode = mode))
-            if (response.isSuccessful && response.body()?.data != null) {
-                val data = response.body()!!.data!!
-                // Re-check with local manager for current saved status
-                val localSaved = localDataManager.getLearnedWords().find { it.word.equals(word.trim(), ignoreCase = true) }
-                return Result.success(
-                    data.copy(
-                        isSaved = localSaved != null || data.isSaved,
-                        savedWordId = localSaved?.id ?: data.savedWordId,
-                        masteryStatus = localSaved?.masteryStatus ?: data.masteryStatus
-                    )
-                )
-            }
-        } catch (_: Exception) {
-            // Backend unreachable, continue to direct Gemini or local engine
-        }
-
-        // 2. Try Direct Gemini REST Client
+        // 1. Try Direct Gemini REST Client with Gemini API Key
         val directGeminiResult = geminiService.lookupWithGemini(word, mode)
         if (directGeminiResult.isSuccess) {
             val res = directGeminiResult.getOrThrow()
@@ -54,9 +34,27 @@ class DictionaryRepository(
             )
         }
 
-        // 3. Resilient Local Smart Dictionary Engine
-        val localResult = localDataManager.lookupWord(word, mode)
-        return Result.success(localResult)
+        // 2. Try Backend Dictionary API as secondary fallback if reachable
+        try {
+            val api = apiClient.getDictionaryApiService()
+            val response = api.lookupWord(LookupWordRequest(word = word, mode = mode))
+            if (response.isSuccessful && response.body()?.data != null) {
+                val data = response.body()!!.data!!
+                val localSaved = localDataManager.getLearnedWords().find { it.word.equals(word.trim(), ignoreCase = true) }
+                return Result.success(
+                    data.copy(
+                        isSaved = localSaved != null || data.isSaved,
+                        savedWordId = localSaved?.id ?: data.savedWordId,
+                        masteryStatus = localSaved?.masteryStatus ?: data.masteryStatus
+                    )
+                )
+            }
+        } catch (_: Exception) {
+            // Backend unreachable
+        }
+
+        // 3. API is not working or unavailable: instruct user to connect to internet
+        return Result.failure(Exception("Please connect to internet"))
     }
 
     suspend fun saveWord(
