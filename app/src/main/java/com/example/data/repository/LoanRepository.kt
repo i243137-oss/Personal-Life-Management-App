@@ -197,7 +197,7 @@ class LoanRepository(
         if (json.isNullOrBlank()) return null
         return try {
             val obj = JSONObject(json)
-            obj.optString("message", null)
+            if (obj.has("message")) obj.optString("message") else null
         } catch (_: Exception) {
             null
         }

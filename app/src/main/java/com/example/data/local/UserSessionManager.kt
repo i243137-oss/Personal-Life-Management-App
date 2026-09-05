@@ -24,7 +24,7 @@ class UserSessionManager(private val context: Context) {
         private val KEY_USER_EMAIL = stringPreferencesKey("user_email")
         private val KEY_BACKEND_URL = stringPreferencesKey("backend_url")
 
-        const val DEFAULT_BACKEND_URL = "http://10.0.2.2:5000/"
+        const val DEFAULT_BACKEND_URL = "https://personal-life-management-app.onrender.com/"
     }
 
     val authTokenFlow: Flow<String?> = context.dataStore.data
@@ -72,7 +72,12 @@ class UserSessionManager(private val context: Context) {
             }
         }
         .map { preferences ->
-            preferences[KEY_BACKEND_URL] ?: DEFAULT_BACKEND_URL
+            val stored = preferences[KEY_BACKEND_URL]
+            if (stored.isNullOrBlank() || stored.contains("10.0.2.2") || stored.contains("localhost")) {
+                DEFAULT_BACKEND_URL
+            } else {
+                stored
+            }
         }
 
     suspend fun saveSession(token: String, user: UserDto) {

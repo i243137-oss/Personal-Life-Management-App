@@ -240,36 +240,6 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Quick Demo Credentials Button
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    email = "demo@example.com"
-                    password = "password123"
-                    focusManager.clearFocus()
-                    authViewModel.login("demo@example.com", "password123")
-                },
-                enabled = !isLoading,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("login_demo_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.WorkspacePremium,
-                    contentDescription = "Demo Account",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "One-Tap Demo Login",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-            }
-
             Spacer(modifier = Modifier.height(20.dp))
 
             Row(

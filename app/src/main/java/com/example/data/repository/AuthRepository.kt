@@ -39,14 +39,8 @@ class AuthRepository(
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            // Offline fallback: create local user account so user can use the app seamlessly
-            val localUser = UserDto(
-                id = "user_" + UUID.randomUUID().toString().take(8),
-                name = name,
-                email = email
-            )
-            sessionManager.saveSession("offline_auth_token", localUser)
-            Result.success(localUser)
+            val message = e.localizedMessage ?: "Unable to connect to server: https://personal-life-management-app.onrender.com"
+            Result.failure(Exception(message))
         }
     }
 
@@ -68,16 +62,8 @@ class AuthRepository(
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            // Offline / Emulator fallback: Allow immediate demo and offline login
-            val isDemo = email.equals("demo@example.com", ignoreCase = true)
-            val displayName = if (isDemo) "Demo User" else email.substringBefore("@").replaceFirstChar { it.uppercase() }
-            val localUser = UserDto(
-                id = if (isDemo) "demo_user_id" else "user_" + UUID.randomUUID().toString().take(8),
-                name = displayName,
-                email = email
-            )
-            sessionManager.saveSession("offline_auth_token", localUser)
-            Result.success(localUser)
+            val message = e.localizedMessage ?: "Unable to connect to server: https://personal-life-management-app.onrender.com"
+            Result.failure(Exception(message))
         }
     }
 
@@ -107,7 +93,7 @@ class AuthRepository(
         if (json.isNullOrBlank()) return null
         return try {
             val obj = JSONObject(json)
-            obj.optString("message", null)
+            if (obj.has("message")) obj.optString("message") else null
         } catch (_: Exception) {
             null
         }

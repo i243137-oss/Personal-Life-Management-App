@@ -334,7 +334,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = currentBackendUrl.ifBlank { "http://10.0.2.2:5000/" },
+                                text = currentBackendUrl.ifBlank { "https://personal-life-management-app.onrender.com/" },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -342,7 +342,7 @@ fun SettingsScreen(
                     }
                     TextButton(
                         onClick = {
-                            tempBackendUrl = currentBackendUrl.ifBlank { "http://10.0.2.2:5000/" }
+                            tempBackendUrl = currentBackendUrl.ifBlank { "https://personal-life-management-app.onrender.com/" }
                             showServerDialog = true
                         },
                         modifier = Modifier.testTag("settings_edit_server_url")
@@ -487,7 +487,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = "Enter your backend server base URL. Default is http://10.0.2.2:5000/ for Android Emulator.",
+                        text = "Enter your backend server base URL. Default is https://personal-life-management-app.onrender.com/.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

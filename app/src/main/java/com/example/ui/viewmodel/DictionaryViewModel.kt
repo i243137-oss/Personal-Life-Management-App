@@ -52,8 +52,6 @@ class DictionaryViewModel(
                 refreshNotebookData()
             }
         }
-        // Initial lookup for demonstration
-        lookupWord("Resilience", "meaning")
     }
 
     fun selectTab(tab: Int) {

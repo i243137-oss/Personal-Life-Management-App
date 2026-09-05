@@ -82,15 +82,7 @@ class LocalDataManager(context: Context) {
 
     init {
         loadFromPrefs()
-        if (_transactionsFlow.value.isEmpty() && _loansFlow.value.isEmpty()) {
-            seedDefaultDemoData()
-        }
-        if (_luggageTripsFlow.value.isEmpty()) {
-            seedDefaultLuggageData()
-        }
-        if (_notesFlow.value.isEmpty()) {
-            seedDefaultNotesData()
-        }
+        purgeDemoData()
     }
 
     private fun loadFromPrefs() {
@@ -190,186 +182,37 @@ class LocalDataManager(context: Context) {
         }
     }
 
-    fun seedDefaultDemoData() {
-        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+    fun purgeDemoData() {
+        val demoTxIds = setOf("tx_1", "tx_2", "tx_3", "tx_4", "tx_5", "tx_6")
+        val demoLoanIds = setOf("loan_1", "loan_2", "loan_3")
+        val demoWordIds = setOf("word_1", "word_2", "word_3", "word_serendipity", "word_ephemeral", "word_eloquent", "word_ubiquitous", "word_resilience")
+        val demoLuggageIds = setOf("trip_dubai_demo", "trip_hunza_demo")
+        val demoNoteIds = setOf("note_welcome", "note_ideas", "note_supplies", "note_finance")
 
-        val demoTransactions = listOf(
-            TransactionDto(
-                id = "tx_1",
-                type = "income",
-                amount = 125000.0,
-                category = "Salary",
-                description = "Monthly Corporate Salary",
-                date = now
-            ),
-            TransactionDto(
-                id = "tx_2",
-                type = "income",
-                amount = 28000.0,
-                category = "Freelance",
-                description = "Mobile App UI Design Project",
-                date = now
-            ),
-            TransactionDto(
-                id = "tx_3",
-                type = "expense",
-                amount = 16500.0,
-                category = "Groceries",
-                description = "Monthly Imtiaz Super Market",
-                date = now
-            ),
-            TransactionDto(
-                id = "tx_4",
-                type = "expense",
-                amount = 7200.0,
-                category = "Transport & Fuel",
-                description = "Petrol PSO refill",
-                date = now
-            ),
-            TransactionDto(
-                id = "tx_5",
-                type = "expense",
-                amount = 4800.0,
-                category = "Dining Out",
-                description = "Dinner with family",
-                date = now
-            ),
-            TransactionDto(
-                id = "tx_6",
-                type = "expense",
-                amount = 11400.0,
-                category = "Bills & Utilities",
-                description = "Electricity bill & Fiber Internet",
-                date = now
-            )
-        )
+        val currentTx = _transactionsFlow.value.filterNot { it.id in demoTxIds }
+        if (currentTx.size != _transactionsFlow.value.size) {
+            saveTransactions(currentTx)
+        }
 
-        val demoLoans = listOf(
-            LoanDto(
-                id = "loan_1",
-                personName = "Hamza Ali",
-                phoneNumber = "03001234567",
-                type = "lent",
-                amount = 15000.0,
-                remainingAmount = 10000.0,
-                status = "partially_paid",
-                dueDate = "2026-09-25",
-                notes = "Shared car engine overhaul",
-                repayments = listOf(
-                    RepaymentDto(
-                        id = "rep_1",
-                        amount = 5000.0,
-                        date = now,
-                        notes = "JazzCash transfer"
-                    )
-                ),
-                createdAt = now
-            ),
-            LoanDto(
-                id = "loan_2",
-                personName = "Zainab Bibi",
-                phoneNumber = "03219876543",
-                type = "lent",
-                amount = 8000.0,
-                remainingAmount = 8000.0,
-                status = "pending",
-                dueDate = "2026-10-05",
-                notes = "University semester books",
-                repayments = emptyList(),
-                createdAt = now
-            ),
-            LoanDto(
-                id = "loan_3",
-                personName = "Usman Ghani",
-                phoneNumber = "03335554433",
-                type = "borrowed",
-                amount = 12000.0,
-                remainingAmount = 12000.0,
-                status = "pending",
-                dueDate = "2026-09-20",
-                notes = "Emergency medical expense cash",
-                repayments = emptyList(),
-                createdAt = now
-            )
-        )
+        val currentLoans = _loansFlow.value.filterNot { it.id in demoLoanIds }
+        if (currentLoans.size != _loansFlow.value.size) {
+            saveLoans(currentLoans)
+        }
 
-        val demoWords = listOf(
-            WordItemDto(
-                id = "word_1",
-                word = "Resilience",
-                mode = "meaning",
-                phonetic = "/rɪˈzɪl.jəns/",
-                partOfSpeech = "noun",
-                shortDefinition = "The capacity to withstand or to recover quickly from difficulties; toughness.",
-                fullDefinition = "The ability of an individual, organization, or system to adapt successfully to stress, adversity, trauma, or significant sources of threat, emerging stronger and more resourceful.",
-                synonyms = listOf("toughness", "adaptability", "endurance", "grit", "buoyancy", "flexibility"),
-                antonyms = listOf("fragility", "vulnerability", "weakness", "rigidity"),
-                examples = listOf(
-                    "Her mental resilience helped her overcome severe setbacks and complete her medical degree.",
-                    "Building economic resilience requires diversifying revenue streams across industries.",
-                    "The bamboo tree is known for its remarkable resilience during severe monsoon storms."
-                ),
-                keyPoints = listOf(
-                    "Resilience is an active, learned behavior rather than a static genetic trait.",
-                    "It involves psychological flexibility, emotional regulation, and social support networks.",
-                    "Fostering resilience prevents chronic burnout and accelerates professional recovery."
-                ),
-                eli5Analogy = "Like a rubber ball that gets squeezed or bounced hard against the floor, but immediately pops right back into its original round shape.",
-                keyTakeaway = "Challenges are inevitable, but our capacity to adapt, recover, and rebound is entirely trainable through deliberate reflection and endurance.",
-                masteryStatus = "mastered",
-                createdAt = now
-            ),
-            WordItemDto(
-                id = "word_2",
-                word = "Serendipity",
-                mode = "meaning",
-                phonetic = "/ˌser.ənˈdɪp.ə.ti/",
-                partOfSpeech = "noun",
-                shortDefinition = "The occurrence and development of events by chance in a happy or beneficial way.",
-                fullDefinition = "The fortunate occurrence of discovering desirable, valuable, or agreeable things when least expected, often while searching for something entirely different.",
-                synonyms = listOf("chance", "happy accident", "fluke", "good fortune", "providence", "luck"),
-                antonyms = listOf("misfortune", "design", "deliberation", "misadventure"),
-                examples = listOf(
-                    "Penicillin was discovered through pure serendipity when Fleming observed mold inhibiting bacteria.",
-                    "A chance meeting at a coffee shop led to a serendipitous multi-million-dollar partnership."
-                ),
-                keyPoints = listOf(
-                    "Serendipity favors the prepared mind: observing the unexpected requires active curiosity.",
-                    "You can increase your serendipity surface area by meeting diverse people and sharing ideas."
-                ),
-                eli5Analogy = "Looking through your winter coat pockets for a tissue, and unexpectedly pulling out a crisp 1000-rupee note you forgot you had.",
-                keyTakeaway = "Keep your curiosity high; the most transformative opportunities in life frequently disguise themselves as happy accidents.",
-                masteryStatus = "learning",
-                createdAt = now
-            ),
-            WordItemDto(
-                id = "word_3",
-                word = "Pragmatic",
-                mode = "meaning",
-                phonetic = "/præɡˈmæt.ɪk/",
-                partOfSpeech = "adjective",
-                shortDefinition = "Dealing with things sensibly and realistically based on practical rather than theoretical considerations.",
-                fullDefinition = "Evaluating theories or beliefs in terms of the success of their practical application; guided by measurable outcomes rather than rigid ideology.",
-                synonyms = listOf("practical", "sensible", "realistic", "down-to-earth", "utilitarian"),
-                antonyms = listOf("idealistic", "impractical", "dogmatic", "unrealistic"),
-                examples = listOf(
-                    "We took a pragmatic approach to the software deadline, focusing on essential features first.",
-                    "A pragmatic budget prioritizes food, rent, and emergency savings before luxury upgrades."
-                ),
-                keyPoints = listOf(
-                    "Pragmatism bridges the gap between ambitious vision and actual feasibility.",
-                    "Essential for effective project management and financial stewardship."
-                ),
-                eli5Analogy = "If it's pouring rain outside, buying a sturdy umbrella that works right away instead of waiting weeks to design a high-tech rain suit.",
-                keyTakeaway = "Actionable, sensible progress in the real world will always outvalue theoretical perfection that never gets shipped.",
-                masteryStatus = "reviewing",
-                createdAt = now
-            )
-        )
+        val currentWords = _wordsFlow.value.filterNot { it.id in demoWordIds }
+        if (currentWords.size != _wordsFlow.value.size) {
+            saveWords(currentWords)
+        }
 
-        saveTransactions(demoTransactions)
-        saveLoans(demoLoans)
-        saveWords(demoWords)
+        val currentLuggage = _luggageTripsFlow.value.filterNot { it.id in demoLuggageIds }
+        if (currentLuggage.size != _luggageTripsFlow.value.size) {
+            saveLuggage(currentLuggage)
+        }
+
+        val currentNotes = _notesFlow.value.filterNot { it.id in demoNoteIds }
+        if (currentNotes.size != _notesFlow.value.size) {
+            saveNotes(currentNotes)
+        }
     }
 
     // --- Transactions Methods ---
@@ -1165,49 +1008,6 @@ class LocalDataManager(context: Context) {
         )
     }
 
-    private fun seedDefaultLuggageData() {
-        val trip1 = LuggageTripDto(
-            id = "trip_dubai_demo",
-            title = "Dubai Tech Summit",
-            destination = "Dubai, UAE",
-            bagType = "Cabin Bag",
-            departureDate = "2026-10-15",
-            returnDate = "2026-10-20",
-            maxWeightKg = 7.0,
-            colorHex = "#2563EB",
-            items = listOf(
-                LuggageItemDto(id = "it_1", name = "Passport & Visa Copies", category = "Documents", quantity = 1, isPacked = true, isEssential = true, weightKg = 0.1),
-                LuggageItemDto(id = "it_2", name = "MacBook Pro & Charger", category = "Electronics", quantity = 1, isPacked = true, isEssential = true, weightKg = 1.8),
-                LuggageItemDto(id = "it_3", name = "Formal Business Shirts (3)", category = "Clothing", quantity = 3, isPacked = false, isEssential = true, weightKg = 0.75),
-                LuggageItemDto(id = "it_4", name = "Universal Travel Adapter", category = "Electronics", quantity = 1, isPacked = false, isEssential = true, weightKg = 0.2),
-                LuggageItemDto(id = "it_5", name = "Clear Toiletries Pouch", category = "Toiletries", quantity = 1, isPacked = false, isEssential = false, weightKg = 0.4),
-                LuggageItemDto(id = "it_6", name = "Prescription Meds", category = "Medication", quantity = 1, isPacked = false, isEssential = true, weightKg = 0.15)
-            )
-        )
-
-        val trip2 = LuggageTripDto(
-            id = "trip_hunza_demo",
-            title = "Northern Road Trip",
-            destination = "Hunza & Skardu",
-            bagType = "Backpack",
-            departureDate = "2026-11-05",
-            returnDate = "2026-11-12",
-            maxWeightKg = 12.0,
-            colorHex = "#059669",
-            items = listOf(
-                LuggageItemDto(id = "it_201", name = "Thermal Jacket & Windbreaker", category = "Clothing", quantity = 1, isPacked = true, isEssential = true, weightKg = 1.2),
-                LuggageItemDto(id = "it_202", name = "Trekking Boots", category = "Clothing", quantity = 1, isPacked = true, isEssential = true, weightKg = 1.4),
-                LuggageItemDto(id = "it_203", name = "Power Bank 20,000mAh", category = "Electronics", quantity = 2, isPacked = false, isEssential = true, weightKg = 0.7),
-                LuggageItemDto(id = "it_204", name = "First Aid Kit & Bandages", category = "Medication", quantity = 1, isPacked = true, isEssential = true, weightKg = 0.4),
-                LuggageItemDto(id = "it_205", name = "CNIC & Vehicle Reg Copies", category = "Documents", quantity = 1, isPacked = false, isEssential = true, weightKg = 0.05),
-                LuggageItemDto(id = "it_206", name = "Thermos Flask", category = "Other", quantity = 1, isPacked = false, isEssential = false, weightKg = 0.5)
-            )
-        )
-
-        val seeded = listOf(enrichLocalTrip(trip1), enrichLocalTrip(trip2))
-        saveLuggage(seeded)
-    }
-
     // --- Phase 6: Notes & Documents Methods ---
 
     fun getNotes(
@@ -1338,69 +1138,6 @@ class LocalDataManager(context: Context) {
         current[index] = updated
         saveNotes(current)
         return updated
-    }
-
-    private fun seedDefaultNotesData() {
-        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
-        val defaultNotes = listOf(
-            NoteDto(
-                id = "note_welcome",
-                title = "Welcome to Notes & Documents",
-                content = "Capture ideas, quick checklists, project thoughts, or personal records. Pin important items so they stay right at the top of your dashboard!",
-                category = "Personal",
-                tags = listOf("welcome", "guide"),
-                isPinned = true,
-                colorHex = "#FEF3C7",
-                checklist = listOf(
-                    ChecklistItemDto(id = "chk_1", text = "Explore categories & colors", isDone = true),
-                    ChecklistItemDto(id = "chk_2", text = "Try pinning a priority note", isDone = true),
-                    ChecklistItemDto(id = "chk_3", text = "Create a custom checklist", isDone = false)
-                ),
-                createdAt = now,
-                updatedAt = now
-            ),
-            NoteDto(
-                id = "note_ideas",
-                title = "Project Innovation Concepts",
-                content = "- Offline-first data caching with real-time sync\n- Material Design 3 dynamic themes\n- Integrated dictionary with AI assistance\n- Smart packing baggage checklists",
-                category = "Ideas",
-                tags = listOf("tech", "architecture"),
-                isPinned = true,
-                colorHex = "#DBEAFE",
-                checklist = emptyList(),
-                createdAt = now,
-                updatedAt = now
-            ),
-            NoteDto(
-                id = "note_supplies",
-                title = "Weekend Home Restock",
-                content = "Pick up essentials during Saturday afternoon errand run.",
-                category = "Checklist",
-                tags = listOf("shopping", "home"),
-                isPinned = false,
-                colorHex = "#D1FAE5",
-                checklist = listOf(
-                    ChecklistItemDto(id = "chk_101", text = "Fresh fruits & vegetables", isDone = true),
-                    ChecklistItemDto(id = "chk_102", text = "Espresso blend beans", isDone = false),
-                    ChecklistItemDto(id = "chk_103", text = "Dishwashing liquid & sponges", isDone = false)
-                ),
-                createdAt = now,
-                updatedAt = now
-            ),
-            NoteDto(
-                id = "note_finance",
-                title = "Monthly Budget Checkpoint",
-                content = "Review total lent balances and upcoming repayment installments from the Loans tab before month end.",
-                category = "Finances",
-                tags = listOf("budget", "loans"),
-                isPinned = false,
-                colorHex = "#EDE9FE",
-                checklist = emptyList(),
-                createdAt = now,
-                updatedAt = now
-            )
-        )
-        saveNotes(defaultNotes)
     }
 
     companion object {
