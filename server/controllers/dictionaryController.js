@@ -159,7 +159,7 @@ Return ONLY a valid, raw JSON object (no markdown formatting, no code block back
       }
     });
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const parsedUrl = new URL(url);
 
     const req = https.request({
@@ -436,26 +436,75 @@ exports.deleteLearnedWord = async (req, res) => {
   }
 };
 
-// Get Vocabulary Summary Stats
-exports.getVocabularyStats = async (req, res) => {
-  try {
-    const total = await Word.countDocuments({ userId: req.user.id });
-    const mastered = await Word.countDocuments({ userId: req.user.id, masteryStatus: 'mastered' });
-    const reviewing = await Word.countDocuments({ userId: req.user.id, masteryStatus: 'reviewing' });
-    const learning = await Word.countDocuments({ userId: req.user.id, masteryStatus: 'learning' });
+// Test Gemini API connectivity
+exports.testGemini = async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined') {
+    return res.status(400).json({
+      success: false,
+      configured: false,
+      message: 'GEMINI_API_KEY is not configured in server environment (.env)'
+    });
+  }
 
-    res.json({
-      success: true,
-      data: {
-        total,
-        mastered,
-        reviewing,
-        learning,
-        masteryPercentage: total > 0 ? Math.round((mastered / total) * 100) : 0
+  const postData = JSON.stringify({
+    contents: [
+      {
+        parts: [{ text: "Hello Gemini! Confirm you are working by replying with 'Gemini is fully operational in Personal Life Manager!' in one sentence." }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 100
+    }
+  });
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const parsedUrl = new URL(url);
+
+  const request = https.request({
+    hostname: parsedUrl.hostname,
+    path: parsedUrl.pathname + parsedUrl.search,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  }, (geminiRes) => {
+    let body = '';
+    geminiRes.on('data', chunk => body += chunk);
+    geminiRes.on('end', () => {
+      try {
+        if (geminiRes.statusCode >= 200 && geminiRes.statusCode < 300) {
+          const data = JSON.parse(body);
+          const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          return res.json({
+            success: true,
+            configured: true,
+            model: 'gemini-2.5-flash',
+            reply: replyText || 'Gemini responded successfully!',
+            maskedKey: apiKey.substring(0, 6) + '...' + apiKey.substring(apiKey.length - 4),
+            timestamp: new Date().toISOString()
+          });
+        }
+        return res.status(geminiRes.statusCode).json({
+          success: false,
+          configured: true,
+          statusCode: geminiRes.statusCode,
+          message: `Gemini API returned HTTP ${geminiRes.statusCode}`,
+          rawResponse: body
+        });
+      } catch (e) {
+        return res.status(500).json({ success: false, message: e.message });
       }
     });
-  } catch (error) {
-    console.error('Error getting vocabulary stats:', error);
-    res.status(500).json({ success: false, message: error.message || 'Error getting vocabulary stats' });
-  }
+  });
+
+  request.on('error', (err) => {
+    res.status(500).json({ success: false, message: err.message });
+  });
+
+  request.write(postData);
+  request.end();
 };
+

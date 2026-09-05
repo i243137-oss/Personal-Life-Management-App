@@ -7,12 +7,14 @@ const {
   getLearnedWords,
   updateMastery,
   deleteLearnedWord,
-  getVocabularyStats
+  getVocabularyStats,
+  testGemini
 } = require('../controllers/dictionaryController');
 
 // All dictionary endpoints are protected
 router.use(protect);
 
+router.get('/test-gemini', testGemini);
 router.post('/lookup', lookupWord);
 router.post('/save', saveWord);
 router.get('/words', getLearnedWords);

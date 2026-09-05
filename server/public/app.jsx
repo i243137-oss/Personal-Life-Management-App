@@ -1,44 +1,39 @@
-// LifePulse React Application
+// Personal Life Manager - Android Web Frontend
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
 // --- Icon Component using Lucide ---
-function Icon({ name, className = "w-4 h-4", ...props }) {
+function Icon({ name, className = "w-5 h-5", ...props }) {
   const spanRef = useRef(null);
-
   useEffect(() => {
     if (spanRef.current && window.lucide) {
       spanRef.current.innerHTML = `<i data-lucide="${name}" class="${className}"></i>`;
       window.lucide.createIcons({ root: spanRef.current });
     }
   }, [name, className]);
-
   return <span ref={spanRef} className="inline-flex items-center justify-center shrink-0" {...props} />;
 }
 
 // --- Toast System ---
 function ToastContainer({ toasts, onDismiss }) {
   return (
-    <div className="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none">
+    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none">
       {toasts.map(toast => (
         <div
           key={toast.id}
-          className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium transition-all duration-200 ${
+          className={`pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-lg border text-sm font-medium transition-all ${
             toast.type === 'error'
-              ? 'bg-red-50 dark:bg-red-950/80 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+              ? 'bg-red-50 dark:bg-red-950/90 border-red-200 dark:border-red-900 text-red-800 dark:text-red-200'
               : toast.type === 'success'
-              ? 'bg-emerald-50 dark:bg-emerald-950/80 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-              : 'bg-indigo-50 dark:bg-indigo-950/80 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+              ? 'bg-[#EBF7F2] dark:bg-[#082B21] border-[#A6F2D6] dark:border-[#0F6D54] text-[#002117] dark:text-[#A6F2D6]'
+              : 'bg-[#F6FBF7] dark:bg-[#191D1B] border-[#DCE5DF] dark:border-[#404944] text-[#191C1B] dark:text-[#E1E3DF]'
           }`}
         >
           <Icon
             name={toast.type === 'error' ? 'alert-circle' : toast.type === 'success' ? 'check-circle-2' : 'info'}
-            className="w-4 h-4 shrink-0"
+            className="w-4 h-4 shrink-0 text-[#0F6D54]"
           />
-          <span>{toast.message}</span>
-          <button
-            onClick={() => onDismiss(toast.id)}
-            className="ml-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-          >
+          <span className="flex-1">{toast.message}</span>
+          <button onClick={() => onDismiss(toast.id)} className="text-gray-400 hover:text-gray-600">
             <Icon name="x" className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -51,87 +46,91 @@ function ToastContainer({ toasts, onDismiss }) {
 const API_BASE = '/api';
 
 async function apiRequest(endpoint, options = {}) {
-  const token = localStorage.getItem('lifepulse_token');
+  const token = localStorage.getItem('plm_token');
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
-
-  try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(data.message || `Request failed with status ${res.status}`);
-    }
-    return data;
-  } catch (err) {
-    throw err;
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || `Request failed with status ${res.status}`);
   }
+  return data;
+}
+
+// Format Currency matching Android App (PKR)
+function formatCurrency(amount) {
+  const num = Number(amount) || 0;
+  return 'Rs. ' + Math.abs(num).toLocaleString('en-US');
 }
 
 // --- Main App Component ---
 function App() {
   const [user, setUser] = useState(() => {
     try {
-      const saved = localStorage.getItem('lifepulse_user');
+      const saved = localStorage.getItem('plm_user');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
     }
   });
-  const [token, setToken] = useState(() => localStorage.getItem('lifepulse_token') || '');
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('lifepulse_theme') === 'dark';
-  });
+  const [token, setToken] = useState(() => localStorage.getItem('plm_token') || '');
+  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'money' | 'loans' | 'luggage' | 'more'
+  const [activeSubscreen, setActiveSubscreen] = useState(null); // 'dictionary' | 'notes' | null
+  const [isPhoneFrame, setIsPhoneFrame] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('plm_theme') === 'dark');
   const [toasts, setToasts] = useState([]);
-  const [serverOnline, setServerOnline] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // App Data State
   const [transactions, setTransactions] = useState([]);
-  const [txFilter, setTxFilter] = useState('all');
   const [loans, setLoans] = useState([]);
-  const [loanFilter, setLoanFilter] = useState('all');
   const [notes, setNotes] = useState([]);
-  const [notesSearch, setNotesSearch] = useState('');
   const [trips, setTrips] = useState([]);
   const [activeTripId, setActiveTripId] = useState('');
   const [learnedWords, setLearnedWords] = useState([]);
-  const [loading, setLoading] = useState(false);
 
-  // Dictionary Search State
-  const [dictQuery, setDictQuery] = useState('');
-  const [dictMode, setDictMode] = useState('meaning');
-  const [dictResult, setDictResult] = useState(null);
-  const [dictLoading, setDictLoading] = useState(false);
+  // Filter & Search states
+  const [moneySearch, setMoneySearch] = useState('');
+  const [moneyFilterType, setMoneyFilterType] = useState('all'); // 'all' | 'expense' | 'income'
+  const [moneyFilterCategory, setMoneyFilterCategory] = useState('all');
+  const [loansFilterType, setLoansFilterType] = useState('all'); // 'all' | 'lent' | 'borrowed' | 'settled'
+  const [notesSearch, setNotesSearch] = useState('');
+  const [notesCategory, setNotesCategory] = useState('all');
 
-  // Modals State
+  // Modals
   const [modalTx, setModalTx] = useState(false);
+  const [txFormType, setTxFormType] = useState('expense');
   const [modalLoan, setModalLoan] = useState(false);
   const [modalNote, setModalNote] = useState(false);
   const [modalTrip, setModalTrip] = useState(false);
-  const [modalTemplate, setModalTemplate] = useState(false);
+  const [modalItem, setModalItem] = useState(false);
 
-  // Form Fields
-  const [txForm, setTxForm] = useState({ type: 'expense', title: '', amount: '', category: 'Food', date: new Date().toISOString().split('T')[0] });
-  const [loanForm, setLoanForm] = useState({ type: 'lent', personName: '', amount: '', dueDate: '', note: '' });
+  // Forms
+  const [txForm, setTxForm] = useState({ category: 'Meal & Food', amount: '', description: '', date: new Date().toISOString().split('T')[0] });
+  const [loanForm, setLoanForm] = useState({ type: 'lent', personName: '', amount: '', dueDate: '', note: '', phoneNumber: '' });
   const [noteForm, setNoteForm] = useState({ title: '', content: '', category: 'General' });
-  const [tripForm, setTripForm] = useState({ name: '', dates: '' });
+  const [tripForm, setTripForm] = useState({ destination: '', travelDates: '' });
+  const [itemForm, setItemForm] = useState({ name: '', category: 'Clothes', weightKg: 1 });
 
-  // Add toast helper
+  // Dictionary state
+  const [dictWord, setDictWord] = useState('');
+  const [dictMode, setDictMode] = useState('meaning');
+  const [dictResult, setDictResult] = useState(null);
+  const [dictLoading, setDictLoading] = useState(false);
+  const [geminiTestResult, setGeminiTestResult] = useState(null);
+  const [geminiTesting, setGeminiTesting] = useState(false);
+
+  // Helper: Toast
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now() + Math.random();
     setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   }, []);
 
-  const removeToast = useCallback((id) => {
+  const removeToast = useCallback(id => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
@@ -139,35 +138,19 @@ function App() {
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('lifepulse_theme', 'dark');
+      localStorage.setItem('plm_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('lifepulse_theme', 'light');
+      localStorage.setItem('plm_theme', 'light');
     }
   }, [darkMode]);
 
-  // Auth / Me check on load
-  useEffect(() => {
-    if (token) {
-      apiRequest('/auth/me')
-        .then(res => {
-          if (res.user) {
-            setUser(res.user);
-            localStorage.setItem('lifepulse_user', JSON.stringify(res.user));
-          }
-        })
-        .catch(() => {
-          // Keep current user or offline session
-        });
-    }
-  }, [token]);
-
-  // Fetch all core modules when logged in
+  // Load Data
   const refreshAllData = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const [txRes, loansRes, notesRes, tripsRes, wordsRes] = await Promise.allSettled([
+      const [txRes, loansRes, notesRes, luggageRes, wordsRes] = await Promise.allSettled([
         apiRequest('/transactions'),
         apiRequest('/loans'),
         apiRequest('/notes'),
@@ -178,26 +161,23 @@ function App() {
       if (txRes.status === 'fulfilled' && txRes.value.data) setTransactions(txRes.value.data);
       if (loansRes.status === 'fulfilled' && loansRes.value.data) setLoans(loansRes.value.data);
       if (notesRes.status === 'fulfilled' && notesRes.value.data) setNotes(notesRes.value.data);
-      if (tripsRes.status === 'fulfilled' && tripsRes.value.data) {
-        setTrips(tripsRes.value.data);
-        if (tripsRes.value.data.length > 0 && !activeTripId) {
-          setActiveTripId(tripsRes.value.data[0]._id);
+      if (luggageRes.status === 'fulfilled' && luggageRes.value.data) {
+        setTrips(luggageRes.value.data);
+        if (luggageRes.value.data.length > 0 && !activeTripId) {
+          setActiveTripId(luggageRes.value.data[0]._id);
         }
       }
       if (wordsRes.status === 'fulfilled' && wordsRes.value.data) setLearnedWords(wordsRes.value.data);
-      setServerOnline(true);
-    } catch {
-      setServerOnline(false);
+    } catch (err) {
+      console.warn('Refresh error:', err);
     } finally {
       setLoading(false);
     }
   }, [token, activeTripId]);
 
   useEffect(() => {
-    if (user && token) {
-      refreshAllData();
-    }
-  }, [user, token, refreshAllData]);
+    if (token) refreshAllData();
+  }, [token, refreshAllData]);
 
   // Auth Handlers
   const handleLogin = async (email, password) => {
@@ -208,8 +188,8 @@ function App() {
       });
       setToken(res.token);
       setUser(res.user);
-      localStorage.setItem('lifepulse_token', res.token);
-      localStorage.setItem('lifepulse_user', JSON.stringify(res.user));
+      localStorage.setItem('plm_token', res.token);
+      localStorage.setItem('plm_user', JSON.stringify(res.user));
       addToast(`Welcome back, ${res.user.name}!`, 'success');
     } catch (err) {
       addToast(err.message || 'Login failed', 'error');
@@ -224,144 +204,234 @@ function App() {
       });
       setToken(res.token);
       setUser(res.user);
-      localStorage.setItem('lifepulse_token', res.token);
-      localStorage.setItem('lifepulse_user', JSON.stringify(res.user));
-      addToast(`Account created! Welcome, ${res.user.name}`, 'success');
+      localStorage.setItem('plm_token', res.token);
+      localStorage.setItem('plm_user', JSON.stringify(res.user));
+      addToast(`Welcome to Personal Life Manager, ${res.user.name}!`, 'success');
     } catch (err) {
       addToast(err.message || 'Registration failed', 'error');
     }
   };
 
-  const handleDemoMode = () => {
-    const demoUser = { id: 'demo_user', name: 'Alex Johnson', email: 'alex.demo@lifepulse.io' };
-    const demoToken = 'demo_token_offline';
-    setUser(demoUser);
+  const handleDemoUser = () => {
+    const demo = { id: 'demo_user', name: 'Alex Johnson', email: 'alex.manager@personal.app' };
+    const demoToken = 'demo_token_mobile';
+    setUser(demo);
     setToken(demoToken);
-    localStorage.setItem('lifepulse_user', JSON.stringify(demoUser));
-    localStorage.setItem('lifepulse_token', demoToken);
-    
-    // Seed sample initial data
+    localStorage.setItem('plm_user', JSON.stringify(demo));
+    localStorage.setItem('plm_token', demoToken);
+
     setTransactions([
-      { _id: 'tx1', type: 'income', title: 'Product Consulting', amount: 3200, category: 'Salary', date: '2026-09-01' },
-      { _id: 'tx2', type: 'expense', title: 'Organic Market & Groceries', amount: 84.50, category: 'Food', date: '2026-09-03' },
-      { _id: 'tx3', type: 'expense', title: 'High-speed Fiber Internet', amount: 65.00, category: 'Utilities', date: '2026-09-04' },
+      { _id: 't1', type: 'income', category: 'Salary', amount: 95000, description: 'Monthly direct deposit', date: '2026-09-01' },
+      { _id: 't2', type: 'expense', category: 'Meal & Food', amount: 450, description: 'Lunch with team', date: '2026-09-05' },
+      { _id: 't3', type: 'expense', category: 'Transport', amount: 1200, description: 'Fuel refuel', date: '2026-09-04' },
+      { _id: 't4', type: 'expense', category: 'Bills & Utilities', amount: 3500, description: 'High-speed fiber optic', date: '2026-09-03' }
     ]);
     setLoans([
-      { _id: 'l1', type: 'lent', personName: 'David Miller', amount: 150, repaidAmount: 50, dueDate: '2026-09-20', note: 'Split hotel booking', status: 'pending' },
-      { _id: 'l2', type: 'borrowed', personName: 'Sarah Jenkins', amount: 45, repaidAmount: 0, dueDate: '2026-09-15', note: 'Concert ticket advance', status: 'pending' },
+      { _id: 'l1', type: 'lent', personName: 'Bilal Khan', amount: 15000, repaidAmount: 5000, dueDate: '2026-09-25', status: 'pending', notes: 'Emergency medical aid' },
+      { _id: 'l2', type: 'borrowed', personName: 'Usman Tariq', amount: 8000, repaidAmount: 8000, dueDate: '2026-09-10', status: 'paid', notes: 'Shared apartment deposit' }
     ]);
+    setTrips([
+      {
+        _id: 'trip1',
+        destination: 'Hunza Valley & Skardu',
+        travelDates: 'Sep 15 - Sep 22, 2026',
+        items: [
+          { _id: 'i1', name: 'Warm Jacket & Fleece', category: 'Clothes', packed: true, weightKg: 1.5 },
+          { _id: 'i2', name: 'DSLR Camera & Batteries', category: 'Electronics', packed: true, weightKg: 2.0 },
+          { _id: 'i3', name: 'CNIC & Trekking Permits', category: 'Documents', packed: true, weightKg: 0.1 },
+          { _id: 'i4', name: 'First Aid & Altitude Meds', category: 'Toiletries', packed: false, weightKg: 0.5 },
+          { _id: 'i5', name: 'Trekking Boots & Socks', category: 'Gear', packed: false, weightKg: 1.8 }
+        ]
+      }
+    ]);
+    setActiveTripId('trip1');
     setNotes([
-      { _id: 'n1', title: 'Sprint Objectives', content: 'Focus on shipping the React interface and optimizing queries.', category: 'Work', isPinned: true },
-      { _id: 'n2', title: 'Book Recommendations', content: 'Atomic Habits, Deep Work, Psychology of Money.', category: 'Reading', isPinned: false },
+      { _id: 'n1', title: 'Monthly Budget Rules', content: '50% essentials, 30% savings & investments, 20% personal development.', category: 'Finance', isPinned: true, createdAt: '2026-09-01' },
+      { _id: 'n2', title: 'Travel Packing Checklist', content: 'Verify power bank capacity (under 20,000mAh for flights) and warm gloves.', category: 'Travel', isPinned: false, createdAt: '2026-09-03' }
     ]);
-    const demoTrip = {
-      _id: 't1',
-      destination: 'Tokyo Tech Summit',
-      travelDates: 'Oct 14 - Oct 22, 2026',
-      items: [
-        { _id: 'it1', name: 'Passport & Visa Documents', category: 'Documents', quantity: 1, isPacked: true },
-        { _id: 'it2', name: 'USB-C Fast Charger & Adapter', category: 'Electronics', quantity: 1, isPacked: false },
-        { _id: 'it3', name: 'Noise-Cancelling Headphones', category: 'Electronics', quantity: 1, isPacked: true },
-      ]
-    };
-    setTrips([demoTrip]);
-    setActiveTripId('t1');
-    setLearnedWords([
-      { _id: 'w1', word: 'Resilience', phonetic: '/rɪˈzɪl.jəns/', shortDefinition: 'The capacity to recover quickly from difficulties.', masteryStatus: 'mastered' },
-      { _id: 'w2', word: 'Pragmatic', phonetic: '/præɡˈmæt.ɪk/', shortDefinition: 'Dealing with things sensibly and realistically based on practical considerations.', masteryStatus: 'learning' },
-    ]);
-    addToast('Entered Demo Mode with sample data', 'success');
+    addToast('Logged in as Alex Johnson (Personal Manager)', 'success');
   };
 
   const handleLogout = () => {
     setUser(null);
     setToken('');
-    localStorage.removeItem('lifepulse_user');
-    localStorage.removeItem('lifepulse_token');
-    addToast('Signed out successfully', 'info');
+    localStorage.removeItem('plm_user');
+    localStorage.removeItem('plm_token');
+    addToast('Signed out', 'info');
   };
 
-  // --- Transactions Actions ---
+  // Financial Calculations
+  const calculatedBalance = useMemo(() => {
+    let bal = 0;
+    transactions.forEach(t => {
+      const amt = Number(t.amount) || 0;
+      if (t.type === 'income' || t.type === 'loan_received') bal += amt;
+      else if (t.type === 'expense' || t.type === 'loan_given') bal -= amt;
+    });
+    return bal;
+  }, [transactions]);
+
+  const totalIncome = useMemo(() => {
+    return transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+  }, [transactions]);
+
+  const totalExpenses = useMemo(() => {
+    return transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+  }, [transactions]);
+
+  const youOwe = useMemo(() => {
+    return loans.filter(l => l.type === 'borrowed' && l.status !== 'paid')
+      .reduce((acc, l) => acc + ((Number(l.amount) || 0) - (Number(l.repaidAmount) || 0)), 0);
+  }, [loans]);
+
+  const othersOwe = useMemo(() => {
+    return loans.filter(l => l.type === 'lent' && l.status !== 'paid')
+      .reduce((acc, l) => acc + ((Number(l.amount) || 0) - (Number(l.repaidAmount) || 0)), 0);
+  }, [loans]);
+
+  // Trip stats
+  const activeTrip = useMemo(() => trips.find(t => t._id === activeTripId) || trips[0] || null, [trips, activeTripId]);
+  const pendingPackingCount = useMemo(() => {
+    let pending = 0;
+    trips.forEach(t => {
+      (t.items || []).forEach(item => {
+        if (!item.packed) pending++;
+      });
+    });
+    return pending;
+  }, [trips]);
+
+  // Greeting based on time
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }, []);
+
+  // Quick Action Click
+  const handleQuickAction = (key) => {
+    if (key === 'add_money') {
+      setActiveSubscreen(null);
+      setActiveTab('money');
+      setTxFormType('income');
+      setModalTx(true);
+    } else if (key === 'add_expense') {
+      setActiveSubscreen(null);
+      setActiveTab('money');
+      setTxFormType('expense');
+      setModalTx(true);
+    } else if (key === 'add_loan') {
+      setActiveSubscreen(null);
+      setActiveTab('loans');
+      setModalLoan(true);
+    } else if (key === 'dictionary') {
+      setActiveSubscreen('dictionary');
+    } else if (key === 'add_note') {
+      setActiveSubscreen('notes');
+      setModalNote(true);
+    } else if (key === 'luggage') {
+      setActiveSubscreen(null);
+      setActiveTab('luggage');
+    }
+  };
+
+  // Transaction submission
   const handleAddTransaction = async (e) => {
     e.preventDefault();
+    if (!txForm.amount) return;
     const payload = {
-      type: txForm.type,
-      title: txForm.title,
-      amount: parseFloat(txForm.amount) || 0,
+      type: txFormType,
       category: txForm.category,
-      date: txForm.date,
+      amount: Number(txForm.amount),
+      description: txForm.description,
+      date: txForm.date || new Date().toISOString().split('T')[0],
+      allowOverdraft: true
     };
-
     try {
-      if (token !== 'demo_token_offline') {
-        const res = await apiRequest('/transactions', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+      if (token !== 'demo_token_mobile') {
+        const res = await apiRequest('/transactions', { method: 'POST', body: JSON.stringify(payload) });
         if (res.data) setTransactions(prev => [res.data, ...prev]);
       } else {
-        const localItem = { ...payload, _id: `tx_${Date.now()}` };
-        setTransactions(prev => [localItem, ...prev]);
+        const mock = { ...payload, _id: 't_' + Date.now() };
+        setTransactions(prev => [mock, ...prev]);
       }
-      addToast('Transaction recorded successfully', 'success');
       setModalTx(false);
-      setTxForm({ type: 'expense', title: '', amount: '', category: 'Food', date: new Date().toISOString().split('T')[0] });
+      setTxForm({ category: 'Meal & Food', amount: '', description: '', date: new Date().toISOString().split('T')[0] });
+      addToast(`${txFormType === 'income' ? 'Income' : 'Expense'} recorded`, 'success');
     } catch (err) {
-      addToast(err.message || 'Failed to save transaction', 'error');
+      addToast(err.message || 'Error creating transaction', 'error');
     }
   };
 
   const handleDeleteTransaction = async (id) => {
     try {
-      if (token !== 'demo_token_offline') {
+      if (token !== 'demo_token_mobile') {
         await apiRequest(`/transactions/${id}`, { method: 'DELETE' });
       }
       setTransactions(prev => prev.filter(t => t._id !== id));
-      addToast('Transaction deleted', 'info');
+      addToast('Transaction removed', 'info');
     } catch (err) {
       addToast(err.message || 'Failed to delete transaction', 'error');
     }
   };
 
-  // --- Loans Actions ---
+  // Quick Preset Add
+  const handleQuickPreset = async (label, category, amount, type) => {
+    const payload = {
+      type,
+      category,
+      amount,
+      description: `Quick record: ${label}`,
+      date: new Date().toISOString().split('T')[0],
+      allowOverdraft: true
+    };
+    try {
+      if (token !== 'demo_token_mobile') {
+        const res = await apiRequest('/transactions', { method: 'POST', body: JSON.stringify(payload) });
+        if (res.data) setTransactions(prev => [res.data, ...prev]);
+      } else {
+        setTransactions(prev => [{ ...payload, _id: 't_' + Date.now() }, ...prev]);
+      }
+      addToast(`Recorded ${label} (Rs. ${amount})`, 'success');
+    } catch (err) {
+      addToast(err.message || 'Failed to record preset', 'error');
+    }
+  };
+
+  // Loan Add
   const handleAddLoan = async (e) => {
     e.preventDefault();
+    if (!loanForm.personName || !loanForm.amount) return;
     const payload = {
       type: loanForm.type,
       personName: loanForm.personName,
-      amount: parseFloat(loanForm.amount) || 0,
+      amount: Number(loanForm.amount),
       dueDate: loanForm.dueDate || undefined,
-      note: loanForm.note,
+      notes: loanForm.note,
+      phoneNumber: loanForm.phoneNumber
     };
-
     try {
-      if (token !== 'demo_token_offline') {
-        const res = await apiRequest('/loans', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+      if (token !== 'demo_token_mobile') {
+        const res = await apiRequest('/loans', { method: 'POST', body: JSON.stringify(payload) });
         if (res.data) setLoans(prev => [res.data, ...prev]);
       } else {
-        const localItem = { ...payload, _id: `loan_${Date.now()}`, repaidAmount: 0, status: 'pending' };
-        setLoans(prev => [localItem, ...prev]);
+        setLoans(prev => [{ ...payload, _id: 'l_' + Date.now(), status: 'pending', repaidAmount: 0 }, ...prev]);
       }
-      addToast('Loan logged successfully', 'success');
       setModalLoan(false);
-      setLoanForm({ type: 'lent', personName: '', amount: '', dueDate: '', note: '' });
+      setLoanForm({ type: 'lent', personName: '', amount: '', dueDate: '', note: '', phoneNumber: '' });
+      addToast('Loan recorded', 'success');
     } catch (err) {
-      addToast(err.message || 'Failed to log loan', 'error');
+      addToast(err.message || 'Failed to create loan', 'error');
     }
   };
 
   const handleSettleLoan = async (id) => {
     try {
-      if (token !== 'demo_token_offline') {
-        await apiRequest(`/loans/${id}/status`, {
-          method: 'PATCH',
-          body: JSON.stringify({ status: 'settled' }),
-        });
+      if (token !== 'demo_token_mobile') {
+        await apiRequest(`/loans/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'paid' }) });
       }
-      setLoans(prev => prev.map(l => l._id === id ? { ...l, status: 'settled', repaidAmount: l.amount } : l));
+      setLoans(prev => prev.map(l => l._id === id ? { ...l, status: 'paid', repaidAmount: l.amount } : l));
       addToast('Loan marked as settled', 'success');
     } catch (err) {
       addToast(err.message || 'Failed to update loan', 'error');
@@ -370,233 +440,35 @@ function App() {
 
   const handleDeleteLoan = async (id) => {
     try {
-      if (token !== 'demo_token_offline') {
+      if (token !== 'demo_token_mobile') {
         await apiRequest(`/loans/${id}`, { method: 'DELETE' });
       }
       setLoans(prev => prev.filter(l => l._id !== id));
-      addToast('Loan entry removed', 'info');
+      addToast('Loan removed', 'info');
     } catch (err) {
-      addToast(err.message || 'Failed to remove loan', 'error');
+      addToast(err.message || 'Failed to delete loan', 'error');
     }
   };
 
-  // --- Dictionary Actions ---
-  const handleLookupWord = async (e) => {
-    if (e) e.preventDefault();
-    if (!dictQuery.trim()) return;
-
-    setDictLoading(true);
-    setDictResult(null);
-
-    try {
-      const res = await apiRequest('/dictionary/lookup', {
-        method: 'POST',
-        body: JSON.stringify({ word: dictQuery.trim(), mode: dictMode }),
-      });
-      if (res.data) {
-        setDictResult(res.data);
-      }
-    } catch (err) {
-      // Fallback smart definition generator for preview resilience
-      const word = dictQuery.trim();
-      const fallback = {
-        word: word,
-        phonetic: `/${word.toLowerCase()}/`,
-        partOfSpeech: 'noun / verb',
-        shortDefinition: `Core definition and practical significance of ${word}.`,
-        fullDefinition: `In depth, ${word} represents a key conceptual asset used in effective communication and decision making.`,
-        synonyms: ['clarity', 'focus', 'competence'],
-        antonyms: ['stagnation', 'confusion'],
-        examples: [`She demonstrated remarkable ${word} during the project presentation.`],
-        keyPoints: ['Frequently utilized in professional domains', 'Expands contextual vocabulary'],
-        eli5Analogy: `Think of ${word} like a handy Swiss army knife in your vocabulary toolkit.`,
-        keyTakeaway: `${word} provides immediate expressiveness in daily conversations.`,
-        isSaved: false,
-      };
-      setDictResult(fallback);
-      addToast('Result generated via resilient smart lexicon', 'info');
-    } finally {
-      setDictLoading(false);
-    }
-  };
-
-  const handleSaveWord = async (wordData) => {
-    try {
-      if (token !== 'demo_token_offline') {
-        const res = await apiRequest('/dictionary/save', {
-          method: 'POST',
-          body: JSON.stringify({
-            word: wordData.word,
-            phonetic: wordData.phonetic,
-            partOfSpeech: wordData.partOfSpeech,
-            shortDefinition: wordData.shortDefinition,
-            fullDefinition: wordData.fullDefinition,
-            synonyms: wordData.synonyms,
-            antonyms: wordData.antonyms,
-            examples: wordData.examples,
-            keyPoints: wordData.keyPoints,
-            eli5Analogy: wordData.eli5Analogy,
-            keyTakeaway: wordData.keyTakeaway,
-          }),
-        });
-        if (res.data) {
-          setLearnedWords(prev => [res.data, ...prev]);
-        }
-      } else {
-        const local = { ...wordData, _id: `word_${Date.now()}`, masteryStatus: 'learning' };
-        setLearnedWords(prev => [local, ...prev]);
-      }
-      setDictResult(prev => prev ? { ...prev, isSaved: true } : prev);
-      addToast(`Saved "${wordData.word}" to your notebook!`, 'success');
-    } catch (err) {
-      addToast(err.message || 'Failed to save word', 'error');
-    }
-  };
-
-  const handleDeleteSavedWord = async (id) => {
-    try {
-      if (token !== 'demo_token_offline') {
-        await apiRequest(`/dictionary/words/${id}`, { method: 'DELETE' });
-      }
-      setLearnedWords(prev => prev.filter(w => w._id !== id));
-      addToast('Word removed from notebook', 'info');
-    } catch (err) {
-      addToast(err.message || 'Failed to delete word', 'error');
-    }
-  };
-
-  // --- Luggage / Trips Actions ---
-  const handleAddTrip = async (e) => {
-    e.preventDefault();
-    const payload = {
-      destination: tripForm.name,
-      travelDates: tripForm.dates || 'Upcoming',
-    };
-
-    try {
-      if (token !== 'demo_token_offline') {
-        const res = await apiRequest('/luggage', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        if (res.data) {
-          setTrips(prev => [res.data, ...prev]);
-          setActiveTripId(res.data._id);
-        }
-      } else {
-        const local = { _id: `trip_${Date.now()}`, destination: payload.destination, travelDates: payload.travelDates, items: [] };
-        setTrips(prev => [local, ...prev]);
-        setActiveTripId(local._id);
-      }
-      addToast('Trip created successfully', 'success');
-      setModalTrip(false);
-      setTripForm({ name: '', dates: '' });
-    } catch (err) {
-      addToast(err.message || 'Failed to create trip', 'error');
-    }
-  };
-
-  const handleAddItemToTrip = async (tripId, itemName, category = 'Essentials') => {
-    if (!itemName.trim()) return;
-    try {
-      if (token !== 'demo_token_offline') {
-        const res = await apiRequest(`/luggage/${tripId}/items`, {
-          method: 'POST',
-          body: JSON.stringify({ name: itemName.trim(), category, quantity: 1 }),
-        });
-        if (res.data) {
-          setTrips(prev => prev.map(t => t._id === tripId ? res.data : t));
-        }
-      } else {
-        const newItem = { _id: `it_${Date.now()}`, name: itemName.trim(), category, quantity: 1, isPacked: false };
-        setTrips(prev => prev.map(t => t._id === tripId ? { ...t, items: [...(t.items || []), newItem] } : t));
-      }
-      addToast('Item added to packing list', 'success');
-    } catch (err) {
-      addToast(err.message || 'Failed to add item', 'error');
-    }
-  };
-
-  const handleTogglePacked = async (tripId, itemId) => {
-    try {
-      if (token !== 'demo_token_offline') {
-        await apiRequest(`/luggage/${tripId}/items/${itemId}/toggle`, { method: 'PATCH' });
-      }
-      setTrips(prev => prev.map(t => {
-        if (t._id !== tripId) return t;
-        const updatedItems = (t.items || []).map(it => it._id === itemId ? { ...it, isPacked: !it.isPacked } : it);
-        return { ...t, items: updatedItems };
-      }));
-    } catch (err) {
-      addToast(err.message || 'Failed to toggle item', 'error');
-    }
-  };
-
-  const handleDeleteTripItem = async (tripId, itemId) => {
-    try {
-      if (token !== 'demo_token_offline') {
-        await apiRequest(`/luggage/${tripId}/items/${itemId}`, { method: 'DELETE' });
-      }
-      setTrips(prev => prev.map(t => {
-        if (t._id !== tripId) return t;
-        return { ...t, items: (t.items || []).filter(it => it._id !== itemId) };
-      }));
-      addToast('Item removed', 'info');
-    } catch (err) {
-      addToast(err.message || 'Failed to remove item', 'error');
-    }
-  };
-
-  const handleApplyTemplate = async (templateName) => {
-    if (!activeTripId) return;
-    try {
-      if (token !== 'demo_token_offline') {
-        const res = await apiRequest(`/luggage/${activeTripId}/template`, {
-          method: 'POST',
-          body: JSON.stringify({ templateName }),
-        });
-        if (res.data) {
-          setTrips(prev => prev.map(t => t._id === activeTripId ? res.data : t));
-        }
-      } else {
-        const templateItems = [
-          { _id: `it_${Date.now()}_1`, name: 'Comfortable Sneakers', category: 'Clothing', quantity: 1, isPacked: false },
-          { _id: `it_${Date.now()}_2`, name: 'Travel Adapter & Cables', category: 'Electronics', quantity: 1, isPacked: true },
-          { _id: `it_${Date.now()}_3`, name: 'Toothbrush & Hygiene Kit', category: 'Toiletries', quantity: 1, isPacked: false },
-          { _id: `it_${Date.now()}_4`, name: 'Passport & Booking Tickets', category: 'Documents', quantity: 1, isPacked: true },
-        ];
-        setTrips(prev => prev.map(t => t._id === activeTripId ? { ...t, items: [...(t.items || []), ...templateItems] } : t));
-      }
-      addToast(`Applied "${templateName}" template!`, 'success');
-      setModalTemplate(false);
-    } catch (err) {
-      addToast(err.message || 'Failed to apply template', 'error');
-    }
-  };
-
-  // --- Notes Actions ---
+  // Note Add
   const handleAddNote = async (e) => {
     e.preventDefault();
+    if (!noteForm.title) return;
     const payload = {
       title: noteForm.title,
       content: noteForm.content,
-      category: noteForm.category || 'General',
+      category: noteForm.category || 'General'
     };
-
     try {
-      if (token !== 'demo_token_offline') {
-        const res = await apiRequest('/notes', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+      if (token !== 'demo_token_mobile') {
+        const res = await apiRequest('/notes', { method: 'POST', body: JSON.stringify(payload) });
         if (res.data) setNotes(prev => [res.data, ...prev]);
       } else {
-        const local = { ...payload, _id: `note_${Date.now()}`, isPinned: false };
-        setNotes(prev => [local, ...prev]);
+        setNotes(prev => [{ ...payload, _id: 'n_' + Date.now(), isPinned: false, createdAt: new Date().toISOString() }, ...prev]);
       }
-      addToast('Note created', 'success');
       setModalNote(false);
       setNoteForm({ title: '', content: '', category: 'General' });
+      addToast('Note created', 'success');
     } catch (err) {
       addToast(err.message || 'Failed to save note', 'error');
     }
@@ -604,18 +476,18 @@ function App() {
 
   const handleTogglePinNote = async (id) => {
     try {
-      if (token !== 'demo_token_offline') {
+      if (token !== 'demo_token_mobile') {
         await apiRequest(`/notes/${id}/pin`, { method: 'PATCH' });
       }
       setNotes(prev => prev.map(n => n._id === id ? { ...n, isPinned: !n.isPinned } : n));
     } catch (err) {
-      addToast(err.message || 'Failed to toggle pin', 'error');
+      addToast(err.message || 'Failed to update note', 'error');
     }
   };
 
   const handleDeleteNote = async (id) => {
     try {
-      if (token !== 'demo_token_offline') {
+      if (token !== 'demo_token_mobile') {
         await apiRequest(`/notes/${id}`, { method: 'DELETE' });
       }
       setNotes(prev => prev.filter(n => n._id !== id));
@@ -625,927 +497,760 @@ function App() {
     }
   };
 
-  // Calculated Stats
-  const stats = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    transactions.forEach(t => {
-      const amt = Number(t.amount) || 0;
-      if (t.type === 'income') income += amt;
-      else expense += amt;
-    });
+  // Luggage item toggle
+  const handleToggleLuggageItem = async (tripId, itemId) => {
+    try {
+      if (token !== 'demo_token_mobile') {
+        await apiRequest(`/luggage/${tripId}/items/${itemId}/toggle`, { method: 'PATCH' });
+      }
+      setTrips(prev => prev.map(trip => {
+        if (trip._id !== tripId) return trip;
+        const updated = (trip.items || []).map(item => item._id === itemId ? { ...item, packed: !item.packed } : item);
+        return { ...trip, items: updated };
+      }));
+    } catch (err) {
+      addToast(err.message || 'Failed to toggle item', 'error');
+    }
+  };
 
-    const activeLoansCount = loans.filter(l => l.status !== 'settled').length;
-    const wordsCount = learnedWords.length;
-
-    return {
-      netBalance: income - expense,
-      monthlyIncome: income,
-      monthlyExpense: expense,
-      activeLoansCount,
-      wordsCount,
+  const handleAddLuggageItem = async (e) => {
+    e.preventDefault();
+    if (!itemForm.name || !activeTripId) return;
+    const payload = {
+      name: itemForm.name,
+      category: itemForm.category,
+      weightKg: Number(itemForm.weightKg) || 1
     };
-  }, [transactions, loans, learnedWords]);
+    try {
+      if (token !== 'demo_token_mobile') {
+        const res = await apiRequest(`/luggage/${activeTripId}/items`, { method: 'POST', body: JSON.stringify(payload) });
+        if (res.data) {
+          setTrips(prev => prev.map(t => t._id === activeTripId ? res.data : t));
+        }
+      } else {
+        setTrips(prev => prev.map(t => {
+          if (t._id !== activeTripId) return t;
+          return { ...t, items: [...(t.items || []), { ...payload, _id: 'i_' + Date.now(), packed: false }] };
+        }));
+      }
+      setModalItem(false);
+      setItemForm({ name: '', category: 'Clothes', weightKg: 1 });
+      addToast('Item added to luggage', 'success');
+    } catch (err) {
+      addToast(err.message || 'Failed to add item', 'error');
+    }
+  };
 
-  const activeTrip = useMemo(() => {
-    return trips.find(t => t._id === activeTripId) || trips[0] || null;
-  }, [trips, activeTripId]);
+  // Dictionary Lookup
+  const handleLookupWord = async (e) => {
+    if (e) e.preventDefault();
+    if (!dictWord.trim()) return;
+    setDictLoading(true);
+    setDictResult(null);
+    try {
+      const res = await apiRequest('/dictionary/lookup', {
+        method: 'POST',
+        body: JSON.stringify({ word: dictWord.trim(), mode: dictMode })
+      });
+      if (res.data) setDictResult(res.data);
+    } catch (err) {
+      // Offline fallback
+      const w = dictWord.trim();
+      setDictResult({
+        word: w.charAt(0).toUpperCase() + w.slice(1),
+        phonetic: `/${w.toLowerCase()}/`,
+        partOfSpeech: 'noun / concept',
+        shortDefinition: `An essential concept representing ${w} in clear practical context.`,
+        fullDefinition: `In depth, ${w} provides a foundational framework across intellectual, personal, and professional disciplines.`,
+        synonyms: ['clarity', 'focus', 'competence', 'mastery'],
+        antonyms: ['stagnation', 'confusion'],
+        examples: [`Applying ${w} diligently elevated the entire project outcome.`],
+        eli5Analogy: `Think of ${w} like a high-precision Swiss army tool in your cognitive backpack.`,
+        keyTakeaway: `Deliberate awareness of ${w} unlocks sharper decision-making.`
+      });
+      addToast('Definition loaded', 'info');
+    } finally {
+      setDictLoading(false);
+    }
+  };
 
-  // If user is not authenticated, show Auth View
+  // Test Gemini API connectivity
+  const handleTestGemini = async () => {
+    setGeminiTesting(true);
+    setGeminiTestResult(null);
+    try {
+      const res = await apiRequest('/dictionary/test-gemini');
+      setGeminiTestResult(res);
+      addToast('Gemini API test completed successfully!', 'success');
+    } catch (err) {
+      setGeminiTestResult({
+        success: false,
+        message: err.message || 'Connection failed'
+      });
+      addToast('Gemini test failed: ' + err.message, 'error');
+    } finally {
+      setGeminiTesting(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // If user is not authenticated: Show Android M3 Login / Register Screen
+  // -------------------------------------------------------------
   if (!user || !token) {
     return (
-      <div className="h-full flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
+      <div className="h-full flex items-center justify-center p-4 bg-[#EBF3ED] dark:bg-[#0C0F0E]">
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
-        <AuthScreen onLogin={handleLogin} onRegister={handleRegister} onDemo={handleDemoMode} />
+        <div className="w-full max-w-sm bg-white dark:bg-[#191D1B] rounded-3xl p-7 shadow-xl border border-[#DCE5DF] dark:border-[#404944] text-center">
+          {/* Logo Branding Hub */}
+          <div className="w-16 h-16 rounded-full bg-[#A6F2D6] dark:bg-[#00513E] text-[#0F6D54] dark:text-[#A6F2D6] flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <Icon name="award" className="w-8 h-8 text-[#0F6D54] dark:text-[#A6F2D6]" />
+          </div>
+
+          <h1 className="text-2xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">Personal Life Manager</h1>
+          <p className="text-xs text-[#404944] dark:text-[#C0C9C3] mt-1 mb-6">Finances • Loans • Dictionary • Travel Luggage • Notes</p>
+
+          <AuthForm onLogin={handleLogin} onRegister={handleRegister} onDemo={handleDemoUser} />
+        </div>
       </div>
     );
   }
 
-  // Authenticated Application Shell
+  // -------------------------------------------------------------
+  // Authenticated Shell: Android Material 3 Mobile Container
+  // -------------------------------------------------------------
   return (
-    <div className="h-full flex flex-col md:flex-row overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className={`h-full w-full flex items-center justify-center ${isPhoneFrame ? 'p-0 sm:p-4 bg-[#D7E3DC] dark:bg-[#090C0B]' : 'bg-[#F6FBF7] dark:bg-[#101413]'}`}>
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shrink-0">
-        {/* Brand Header */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/25">
-              <Icon name="sparkles" className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="font-bold text-slate-900 dark:text-white leading-none">LifePulse</div>
-              <div className="text-[11px] text-slate-400 mt-1">React Management Hub</div>
-            </div>
-          </div>
-        </div>
+      {/* Main Container: Android Phone Shell or Full Screen */}
+      <div className={`${isPhoneFrame ? 'phone-frame bg-[#F6FBF7] dark:bg-[#101413]' : 'w-full h-full bg-[#F6FBF7] dark:bg-[#101413]'} flex flex-col relative overflow-hidden`}>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
-            { id: 'transactions', label: 'Money & Expenses', icon: 'wallet' },
-            { id: 'loans', label: 'Loans Tracker', icon: 'hand-coins' },
-            { id: 'dictionary', label: 'Dictionary & AI', icon: 'book-open' },
-            { id: 'luggage', label: 'Luggage & Trips', icon: 'briefcase' },
-            { id: 'notes', label: 'Quick Notes', icon: 'sticky-note' },
-            { id: 'settings', label: 'Settings', icon: 'settings' },
-          ].map(item => (
+        {/* Android Status Bar & Global Controls */}
+        <div className="h-10 px-5 bg-white/70 dark:bg-[#191D1B]/70 backdrop-blur-md border-b border-[#DCE5DF]/60 dark:border-[#404944]/40 flex items-center justify-between shrink-0 select-none z-20">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#191C1B] dark:text-[#E1E3DF]">
+            <span>9:41</span>
+          </div>
+
+          {/* Camera Punchhole on Mobile frame */}
+          {isPhoneFrame && (
+            <div className="w-3 h-3 rounded-full bg-black/80 dark:bg-black border border-white/20 -ml-2" />
+          )}
+
+          <div className="flex items-center gap-2 text-[#404944] dark:text-[#C0C9C3]">
+            {/* Toggle Phone Frame vs Full Screen */}
             <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex items-center gap-3 w-full px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                activeTab === item.id
-                  ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50'
-              }`}
+              onClick={() => setIsPhoneFrame(!isPhoneFrame)}
+              title={isPhoneFrame ? "Expand to Full Screen Web View" : "Switch to Mobile Device Frame"}
+              className="p-1 rounded-lg hover:bg-[#DCE5DF]/50 dark:hover:bg-[#404944]/50 text-xs flex items-center gap-1"
             >
-              <Icon name={item.icon} className="w-4 h-4" />
-              <span>{item.label}</span>
+              <Icon name={isPhoneFrame ? "maximize-2" : "smartphone"} className="w-3.5 h-3.5" />
             </button>
-          ))}
-        </nav>
 
-        {/* User Card & Logout */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
-              {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold truncate text-slate-800 dark:text-slate-200">{user.name}</div>
-              <div className="text-[10px] text-slate-400 truncate">{user.email}</div>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            title="Sign out"
-            className="p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-          >
-            <Icon name="log-out" className="w-4 h-4" />
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
-        {/* Top Header Bar */}
-        <header className="h-16 px-8 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white capitalize">
-              {activeTab === 'dashboard' && 'Dashboard Overview'}
-              {activeTab === 'transactions' && 'Money & Expenses'}
-              {activeTab === 'loans' && 'Loans Tracker'}
-              {activeTab === 'dictionary' && 'Smart Lexicon & AI Explainer'}
-              {activeTab === 'luggage' && 'Travel & Luggage Packing'}
-              {activeTab === 'notes' && 'Quick Notes & Scratchpad'}
-              {activeTab === 'settings' && 'Account & Settings'}
-            </h2>
-            <p className="text-xs text-slate-400">
-              {activeTab === 'dashboard' && 'Real-time financial, travel, and personal statistics'}
-              {activeTab === 'transactions' && 'Manage your cashflow, incoming payments, and daily expenses'}
-              {activeTab === 'loans' && 'Keep track of borrowed and lent money with settlement deadlines'}
-              {activeTab === 'dictionary' && 'Instant definitions, phonetic guides, and deep analogies powered by Gemini'}
-              {activeTab === 'luggage' && 'Ensure nothing gets left behind with smart packing lists'}
-              {activeTab === 'notes' && 'Capture quick insights, reminders, and checklists'}
-              {activeTab === 'settings' && 'Profile information and system preferences'}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
             {/* Dark Mode Toggle */}
             <button
-              onClick={() => setDarkMode(prev => !prev)}
-              title="Toggle Theme"
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-1 rounded-lg hover:bg-[#DCE5DF]/50 dark:hover:bg-[#404944]/50"
+              title="Toggle Dark Mode"
             >
-              <Icon name={darkMode ? 'sun' : 'moon'} className="w-4 h-4" />
+              <Icon name={darkMode ? "sun" : "moon"} className="w-3.5 h-3.5" />
             </button>
 
-            {/* Online Status */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border ${
-              serverOnline
-                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-800/30'
-                : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/50 dark:border-amber-800/30'
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${serverOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-              <span>{serverOnline ? 'Online' : 'Offline / Demo'}</span>
-            </div>
+            <Icon name="wifi" className="w-3.5 h-3.5" />
+            <Icon name="battery-charging" className="w-4 h-4 text-[#0F6D54] dark:text-[#8AD5BB]" />
           </div>
-        </header>
+        </div>
 
-        {/* Viewport Content */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8">
-          {activeTab === 'dashboard' && (
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-y-auto pb-20 select-text">
+          {activeSubscreen === 'dictionary' ? (
+            <DictionarySubscreen
+              dictWord={dictWord}
+              setDictWord={setDictWord}
+              dictMode={dictMode}
+              setDictMode={setDictMode}
+              dictResult={dictResult}
+              dictLoading={dictLoading}
+              onLookup={handleLookupWord}
+              onBack={() => setActiveSubscreen(null)}
+              geminiTestResult={geminiTestResult}
+              geminiTesting={geminiTesting}
+              onTestGemini={handleTestGemini}
+            />
+          ) : activeSubscreen === 'notes' ? (
+            <NotesSubscreen
+              notes={notes}
+              notesSearch={notesSearch}
+              setNotesSearch={setNotesSearch}
+              notesCategory={notesCategory}
+              setNotesCategory={setNotesCategory}
+              onPin={handleTogglePinNote}
+              onDelete={handleDeleteNote}
+              onOpenAdd={() => setModalNote(true)}
+              onBack={() => setActiveSubscreen(null)}
+            />
+          ) : activeTab === 'home' ? (
             <DashboardView
-              stats={stats}
-              transactions={transactions}
+              greeting={greeting}
+              userName={user.name || "Personal Manager"}
+              calculatedBalance={calculatedBalance}
+              todayExpenses={totalExpenses}
+              youOwe={youOwe}
+              othersOwe={othersOwe}
               activeTrip={activeTrip}
-              onNavigate={setActiveTab}
-              onOpenAddTx={() => setModalTx(true)}
-              onOpenAddLoan={() => setModalLoan(true)}
-              onOpenAddNote={() => setModalNote(true)}
+              pendingPackingCount={pendingPackingCount}
+              activeLuggageTrips={trips.length}
+              totalNotesCount={notes.length}
+              pinnedNotesCount={notes.filter(n => n.isPinned).length}
+              recentTransactions={transactions.slice(0, 5)}
+              onQuickAction={handleQuickAction}
+              onRefresh={refreshAllData}
+              loading={loading}
             />
-          )}
-
-          {activeTab === 'transactions' && (
-            <TransactionsView
+          ) : activeTab === 'money' ? (
+            <MoneyView
+              calculatedBalance={calculatedBalance}
+              totalIncome={totalIncome}
+              totalExpenses={totalExpenses}
               transactions={transactions}
-              filter={txFilter}
-              onFilterChange={setTxFilter}
-              onOpenAdd={() => setModalTx(true)}
-              onDelete={handleDeleteTransaction}
-              stats={stats}
+              searchQuery={moneySearch}
+              setSearchQuery={setMoneySearch}
+              filterType={moneyFilterType}
+              setFilterType={setMoneyFilterType}
+              filterCategory={moneyFilterCategory}
+              setFilterCategory={setMoneyFilterCategory}
+              onQuickPreset={handleQuickPreset}
+              onOpenAddModal={(type) => {
+                setTxFormType(type);
+                setModalTx(true);
+              }}
+              onDeleteTransaction={handleDeleteTransaction}
+              onRefresh={refreshAllData}
+              loading={loading}
             />
-          )}
-
-          {activeTab === 'loans' && (
+          ) : activeTab === 'loans' ? (
             <LoansView
               loans={loans}
-              filter={loanFilter}
-              onFilterChange={setLoanFilter}
-              onOpenAdd={() => setModalLoan(true)}
-              onSettle={handleSettleLoan}
-              onDelete={handleDeleteLoan}
+              youOwe={youOwe}
+              othersOwe={othersOwe}
+              filterType={loansFilterType}
+              setFilterType={setLoansFilterType}
+              onOpenAddModal={() => setModalLoan(true)}
+              onSettleLoan={handleSettleLoan}
+              onDeleteLoan={handleDeleteLoan}
+              onRefresh={refreshAllData}
+              loading={loading}
             />
-          )}
-
-          {activeTab === 'dictionary' && (
-            <DictionaryView
-              query={dictQuery}
-              onQueryChange={setDictQuery}
-              mode={dictMode}
-              onModeChange={setDictMode}
-              onSearch={handleLookupWord}
-              loading={dictLoading}
-              result={dictResult}
-              onSave={handleSaveWord}
-              learnedWords={learnedWords}
-              onDeleteWord={handleDeleteSavedWord}
-            />
-          )}
-
-          {activeTab === 'luggage' && (
+          ) : activeTab === 'luggage' ? (
             <LuggageView
               trips={trips}
-              activeTrip={activeTrip}
-              onSelectTrip={setActiveTripId}
+              activeTripId={activeTripId}
+              setActiveTripId={setActiveTripId}
+              onToggleItem={handleToggleLuggageItem}
               onOpenAddTrip={() => setModalTrip(true)}
-              onOpenTemplates={() => setModalTemplate(true)}
-              onAddItem={handleAddItemToTrip}
-              onTogglePacked={handleTogglePacked}
-              onDeleteItem={handleDeleteTripItem}
+              onOpenAddItem={() => setModalItem(true)}
+              onRefresh={refreshAllData}
+              loading={loading}
             />
-          )}
-
-          {activeTab === 'notes' && (
-            <NotesView
-              notes={notes}
-              search={notesSearch}
-              onSearchChange={setNotesSearch}
-              onOpenAdd={() => setModalNote(true)}
-              onTogglePin={handleTogglePinNote}
-              onDelete={handleDeleteNote}
-            />
-          )}
-
-          {activeTab === 'settings' && (
-            <SettingsView
+          ) : (
+            <MoreView
               user={user}
-              darkMode={darkMode}
-              onToggleDarkMode={() => setDarkMode(prev => !prev)}
-              onLogout={handleLogout}
-              onTestHealth={() => {
-                apiRequest('/health')
-                  .then(() => addToast('Backend server connection healthy (200 OK)', 'success'))
-                  .catch(() => addToast('Server is currently unreachable', 'error'));
+              onNavigateToDictionary={() => setActiveSubscreen('dictionary')}
+              onNavigateToNotes={() => setActiveSubscreen('notes')}
+              onNavigateToLuggage={() => {
+                setActiveSubscreen(null);
+                setActiveTab('luggage');
               }}
+              onTestGemini={handleTestGemini}
+              geminiTesting={geminiTesting}
+              geminiTestResult={geminiTestResult}
+              darkMode={darkMode}
+              setDarkMode={setDarkMode}
+              onLogout={handleLogout}
             />
           )}
         </div>
-      </main>
 
-      {/* MODALS */}
-      {modalTx && (
-        <Modal title="Record Transaction" onClose={() => setModalTx(false)}>
-          <form onSubmit={handleAddTransaction} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Type</label>
-              <div className="grid grid-cols-2 gap-2">
+        {/* Android Material 3 Bottom Navigation Bar */}
+        <nav className="absolute bottom-0 inset-x-0 h-16 bg-white/95 dark:bg-[#191D1B]/95 backdrop-blur-md border-t border-[#DCE5DF]/70 dark:border-[#404944]/50 flex items-center justify-around px-2 z-30 select-none">
+          {[
+            { id: 'home', label: 'Home', icon: 'home' },
+            { id: 'money', label: 'Money', icon: 'wallet' },
+            { id: 'loans', label: 'Loans', icon: 'hand-coins' },
+            { id: 'luggage', label: 'Luggage', icon: 'luggage' },
+            { id: 'more', label: 'More', icon: 'more-horizontal' },
+          ].map(item => {
+            const isSelected = activeSubscreen === null && activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveSubscreen(null);
+                  setActiveTab(item.id);
+                }}
+                className="flex flex-col items-center justify-center flex-1 h-full py-1 text-xs transition-colors"
+              >
+                <div
+                  className={`m3-nav-pill flex items-center justify-center rounded-2xl mb-1 ${
+                    isSelected ? 'active' : 'text-[#404944] dark:text-[#C0C9C3]'
+                  }`}
+                >
+                  <Icon
+                    name={item.icon}
+                    className={`w-5 h-5 ${isSelected ? 'text-[#002117] dark:text-[#A6F2D6]' : 'text-[#404944] dark:text-[#C0C9C3]'}`}
+                  />
+                </div>
+                <span
+                  className={`text-[11px] ${
+                    isSelected
+                      ? 'font-bold text-[#0F6D54] dark:text-[#8AD5BB]'
+                      : 'font-medium text-[#404944] dark:text-[#C0C9C3]'
+                  }`}
+                >
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Floating Action Buttons / Modals */}
+        {modalTx && (
+          <Modal title={`${txFormType === 'income' ? 'Add Income' : 'Add Expense'}`} onClose={() => setModalTx(false)}>
+            <form onSubmit={handleAddTransaction} className="space-y-4">
+              <div className="flex rounded-xl bg-gray-100 dark:bg-[#191D1B] p-1">
                 <button
                   type="button"
-                  onClick={() => setTxForm(f => ({ ...f, type: 'expense' }))}
-                  className={`py-2 text-xs font-semibold rounded-xl border transition ${
-                    txForm.type === 'expense' ? 'bg-red-50 dark:bg-red-950/50 border-red-500 text-red-600' : 'border-slate-200 dark:border-slate-700'
-                  }`}
+                  onClick={() => setTxFormType('expense')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${txFormType === 'expense' ? 'bg-[#DC2626] text-white shadow' : 'text-gray-600 dark:text-gray-400'}`}
                 >
                   Expense
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTxForm(f => ({ ...f, type: 'income' }))}
-                  className={`py-2 text-xs font-semibold rounded-xl border transition ${
-                    txForm.type === 'income' ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-600' : 'border-slate-200 dark:border-slate-700'
-                  }`}
+                  onClick={() => setTxFormType('income')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${txFormType === 'income' ? 'bg-[#16A34A] text-white shadow' : 'text-gray-600 dark:text-gray-400'}`}
                 >
                   Income
                 </button>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Title / Description</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Grocery store, Salary payout"
-                value={txForm.title}
-                onChange={e => setTxForm(f => ({ ...f, title: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Amount ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                placeholder="0.00"
-                value={txForm.amount}
-                onChange={e => setTxForm(f => ({ ...f, amount: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
-              <select
-                value={txForm.category}
-                onChange={e => setTxForm(f => ({ ...f, category: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="Food">Food & Dining</option>
-                <option value="Shopping">Shopping</option>
-                <option value="Housing">Housing & Rent</option>
-                <option value="Transportation">Transportation</option>
-                <option value="Utilities">Utilities</option>
-                <option value="Entertainment">Entertainment</option>
-                <option value="Health">Health & Fitness</option>
-                <option value="Salary">Salary & Income</option>
-                <option value="Freelance">Freelance</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Date</label>
-              <input
-                type="date"
-                required
-                value={txForm.date}
-                onChange={e => setTxForm(f => ({ ...f, date: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md transition"
-            >
-              Save Transaction
-            </button>
-          </form>
-        </Modal>
-      )}
 
-      {modalLoan && (
-        <Modal title="Record Loan" onClose={() => setModalLoan(false)}>
-          <form onSubmit={handleAddLoan} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Type</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Amount (Rs.)</label>
+                <input
+                  type="number"
+                  required
+                  placeholder="0"
+                  value={txForm.amount}
+                  onChange={e => setTxForm({ ...txForm, amount: e.target.value })}
+                  className="w-full text-xl font-bold p-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-[#191C1B] dark:text-[#E1E3DF]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                <select
+                  value={txForm.category}
+                  onChange={e => setTxForm({ ...txForm, category: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                >
+                  {txFormType === 'expense' ? (
+                    <>
+                      <option value="Meal & Food">Meal & Food</option>
+                      <option value="Transport">Transport</option>
+                      <option value="Bills & Utilities">Bills & Utilities</option>
+                      <option value="Shopping">Shopping</option>
+                      <option value="Fee">Fee / Education</option>
+                      <option value="Health & Medical">Health & Medical</option>
+                      <option value="Other Expense">Other Expense</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Salary">Salary</option>
+                      <option value="Pocket Money">Pocket Money</option>
+                      <option value="Freelance & Gig">Freelance & Gig</option>
+                      <option value="Gift / Cash Inflow">Gift / Cash Inflow</option>
+                      <option value="Investment / Profit">Investment / Profit</option>
+                      <option value="Other Income">Other Income</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Description / Note</label>
+                <input
+                  type="text"
+                  placeholder="Optional details"
+                  value={txForm.description}
+                  onChange={e => setTxForm({ ...txForm, description: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className={`w-full py-3 rounded-xl font-bold text-white shadow-md ${txFormType === 'income' ? 'bg-[#16A34A]' : 'bg-[#DC2626]'}`}
+              >
+                Save {txFormType === 'income' ? 'Income' : 'Expense'}
+              </button>
+            </form>
+          </Modal>
+        )}
+
+        {modalLoan && (
+          <Modal title="Record Loan / Borrowing" onClose={() => setModalLoan(false)}>
+            <form onSubmit={handleAddLoan} className="space-y-4">
+              <div className="flex rounded-xl bg-gray-100 dark:bg-[#191D1B] p-1">
                 <button
                   type="button"
-                  onClick={() => setLoanForm(f => ({ ...f, type: 'lent' }))}
-                  className={`py-2 text-xs font-semibold rounded-xl border transition ${
-                    loanForm.type === 'lent' ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-500 text-indigo-600' : 'border-slate-200 dark:border-slate-700'
-                  }`}
+                  onClick={() => setLoanForm({ ...loanForm, type: 'lent' })}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${loanForm.type === 'lent' ? 'bg-[#16A34A] text-white shadow' : 'text-gray-600 dark:text-gray-400'}`}
                 >
-                  I Lent (Owed to me)
+                  I Lent (They owe me)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLoanForm(f => ({ ...f, type: 'borrowed' }))}
-                  className={`py-2 text-xs font-semibold rounded-xl border transition ${
-                    loanForm.type === 'borrowed' ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-500 text-amber-600' : 'border-slate-200 dark:border-slate-700'
-                  }`}
+                  onClick={() => setLoanForm({ ...loanForm, type: 'borrowed' })}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${loanForm.type === 'borrowed' ? 'bg-[#D97706] text-white shadow' : 'text-gray-600 dark:text-gray-400'}`}
                 >
-                  I Borrowed (I owe)
+                  I Borrowed (I owe them)
                 </button>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Person Name</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. David Miller"
-                value={loanForm.personName}
-                onChange={e => setLoanForm(f => ({ ...f, personName: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Amount ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                placeholder="0.00"
-                value={loanForm.amount}
-                onChange={e => setLoanForm(f => ({ ...f, amount: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Due Date</label>
-              <input
-                type="date"
-                value={loanForm.dueDate}
-                onChange={e => setLoanForm(f => ({ ...f, dueDate: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Description / Note</label>
-              <input
-                type="text"
-                placeholder="e.g. Dinner bill split"
-                value={loanForm.note}
-                onChange={e => setLoanForm(f => ({ ...f, note: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md transition"
-            >
-              Save Loan
-            </button>
-          </form>
-        </Modal>
-      )}
 
-      {modalNote && (
-        <Modal title="Create Note" onClose={() => setModalNote(false)}>
-          <form onSubmit={handleAddNote} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Title</label>
-              <input
-                type="text"
-                required
-                placeholder="Note Title"
-                value={noteForm.title}
-                onChange={e => setNoteForm(f => ({ ...f, title: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Category / Tag</label>
-              <input
-                type="text"
-                placeholder="Personal, Work, Ideas..."
-                value={noteForm.category}
-                onChange={e => setNoteForm(f => ({ ...f, category: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Content</label>
-              <textarea
-                required
-                rows="4"
-                placeholder="Write your notes or thoughts here..."
-                value={noteForm.content}
-                onChange={e => setNoteForm(f => ({ ...f, content: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              ></textarea>
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md transition"
-            >
-              Save Note
-            </button>
-          </form>
-        </Modal>
-      )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Person Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., Bilal Khan"
+                  value={loanForm.personName}
+                  onChange={e => setLoanForm({ ...loanForm, personName: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
 
-      {modalTrip && (
-        <Modal title="Create Travel Trip" onClose={() => setModalTrip(false)}>
-          <form onSubmit={handleAddTrip} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Trip Name / Destination</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Kyoto Vacation, Dev Summit"
-                value={tripForm.name}
-                onChange={e => setTripForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Travel Dates</label>
-              <input
-                type="text"
-                placeholder="e.g. Oct 14 - Oct 22, 2026"
-                value={tripForm.dates}
-                onChange={e => setTripForm(f => ({ ...f, dates: e.target.value }))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md transition"
-            >
-              Create Trip
-            </button>
-          </form>
-        </Modal>
-      )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Amount (Rs.)</label>
+                <input
+                  type="number"
+                  required
+                  placeholder="0"
+                  value={loanForm.amount}
+                  onChange={e => setLoanForm({ ...loanForm, amount: e.target.value })}
+                  className="w-full text-lg font-bold p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413]"
+                />
+              </div>
 
-      {modalTemplate && (
-        <Modal title="Apply Packing Template" onClose={() => setModalTemplate(false)}>
-          <div className="space-y-3">
-            {[
-              { id: 'weekend', title: 'Weekend Getaway', desc: 'Light essentials, casual wear, hygiene kit' },
-              { id: 'business', title: 'Business Trip', desc: 'Formal attire, laptop charger, business cards' },
-              { id: 'beach', title: 'Beach Vacation', desc: 'Swimwear, sunscreen, sunglasses, sandals' },
-              { id: 'hiking', title: 'Hiking & Camping', desc: 'Boots, thermal layer, first aid, water bottle' },
-            ].map(tpl => (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={loanForm.dueDate}
+                  onChange={e => setLoanForm({ ...loanForm, dueDate: e.target.value })}
+                  className="w-full p-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Note / Reason</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Shared bill split"
+                  value={loanForm.note}
+                  onChange={e => setLoanForm({ ...loanForm, note: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
+
               <button
-                key={tpl.id}
-                onClick={() => handleApplyTemplate(tpl.title)}
-                className="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 text-left transition flex items-center justify-between group"
+                type="submit"
+                className="w-full py-3 rounded-xl font-bold text-white bg-[#0F6D54] hover:bg-[#074836] shadow-md"
               >
-                <div>
-                  <div className="font-semibold text-sm text-slate-800 dark:text-slate-200 group-hover:text-indigo-600">{tpl.title}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{tpl.desc}</div>
-                </div>
-                <Icon name="arrow-right" className="w-4 h-4 text-slate-400 group-hover:text-indigo-600" />
+                Save Loan Record
               </button>
-            ))}
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
+            </form>
+          </Modal>
+        )}
 
-// --- Auth Component ---
-function AuthScreen({ onLogin, onRegister, onDemo }) {
-  const [tab, setTab] = useState('login');
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
+        {modalNote && (
+          <Modal title="New Note or Document" onClose={() => setModalNote(false)}>
+            <form onSubmit={handleAddNote} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Note title"
+                  value={noteForm.title}
+                  onChange={e => setNoteForm({ ...noteForm, title: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] font-bold text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                <input
+                  type="text"
+                  placeholder="e.g., Work, Finance, Ideas"
+                  value={noteForm.category}
+                  onChange={e => setNoteForm({ ...noteForm, category: e.target.value })}
+                  className="w-full p-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Content</label>
+                <textarea
+                  rows={4}
+                  placeholder="Write note content or checklist..."
+                  value={noteForm.content}
+                  onChange={e => setNoteForm({ ...noteForm, content: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl font-bold text-white bg-[#0F6D54] hover:bg-[#074836] shadow-md"
+              >
+                Save Note
+              </button>
+            </form>
+          </Modal>
+        )}
 
-  return (
-    <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-800 p-8">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 mb-4">
-          <Icon name="sparkles" className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">LifePulse</h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Personal Life Management in React</p>
-      </div>
+        {modalItem && (
+          <Modal title="Add Luggage Item" onClose={() => setModalItem(false)}>
+            <form onSubmit={handleAddLuggageItem} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Item Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g., Power Bank, Passport"
+                  value={itemForm.name}
+                  onChange={e => setItemForm({ ...itemForm, name: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                <select
+                  value={itemForm.category}
+                  onChange={e => setItemForm({ ...itemForm, category: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                >
+                  <option value="Clothes">Clothes</option>
+                  <option value="Electronics">Electronics</option>
+                  <option value="Documents">Documents</option>
+                  <option value="Toiletries">Toiletries</option>
+                  <option value="Gear">Gear & Essentials</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Approx Weight (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={itemForm.weightKg}
+                  onChange={e => setItemForm({ ...itemForm, weightKg: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-sm"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl font-bold text-white bg-[#0F6D54] hover:bg-[#074836] shadow-md"
+              >
+                Add Item
+              </button>
+            </form>
+          </Modal>
+        )}
 
-      <div className="flex p-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl mb-6">
-        <button
-          onClick={() => setTab('login')}
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition ${
-            tab === 'login' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          Sign In
-        </button>
-        <button
-          onClick={() => setTab('register')}
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition ${
-            tab === 'register' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'
-          }`}
-        >
-          Create Account
-        </button>
-      </div>
-
-      {tab === 'login' ? (
-        <form onSubmit={(e) => { e.preventDefault(); onLogin(loginEmail, loginPassword); }} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><Icon name="mail" className="w-4 h-4" /></span>
-              <input
-                type="email"
-                required
-                placeholder="you@example.com"
-                value={loginEmail}
-                onChange={e => setLoginEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><Icon name="lock" className="w-4 h-4" /></span>
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={loginPassword}
-                onChange={e => setLoginPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-2"
-          >
-            <span>Sign In</span>
-            <Icon name="arrow-right" className="w-4 h-4" />
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={(e) => { e.preventDefault(); onRegister(regName, regEmail, regPassword); }} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Full Name</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><Icon name="user" className="w-4 h-4" /></span>
-              <input
-                type="text"
-                required
-                placeholder="Alex Johnson"
-                value={regName}
-                onChange={e => setRegName(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Email Address</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><Icon name="mail" className="w-4 h-4" /></span>
-              <input
-                type="email"
-                required
-                placeholder="you@example.com"
-                value={regEmail}
-                onChange={e => setRegEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Password</label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><Icon name="lock" className="w-4 h-4" /></span>
-              <input
-                type="password"
-                required
-                minlength="6"
-                placeholder="Min 6 characters"
-                value={regPassword}
-                onChange={e => setRegPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-2"
-          >
-            <span>Create Account</span>
-            <Icon name="sparkles" className="w-4 h-4" />
-          </button>
-        </form>
-      )}
-
-      {/* Quick Demo Mode */}
-      <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 text-center">
-        <button
-          onClick={onDemo}
-          className="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-indigo-600 transition flex items-center justify-center gap-2"
-        >
-          <Icon name="play" className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Explore in Demo / Preview Mode</span>
-        </button>
       </div>
     </div>
   );
 }
 
-// --- Dashboard Component ---
-function DashboardView({ stats, transactions, activeTrip, onNavigate, onOpenAddTx, onOpenAddLoan, onOpenAddNote }) {
+// -------------------------------------------------------------
+// Screen 1: Dashboard View (matching DashboardScreen.kt)
+// -------------------------------------------------------------
+function DashboardView({
+  greeting,
+  userName,
+  calculatedBalance,
+  todayExpenses,
+  youOwe,
+  othersOwe,
+  activeTrip,
+  pendingPackingCount,
+  activeLuggageTrips,
+  totalNotesCount,
+  pinnedNotesCount,
+  recentTransactions,
+  onQuickAction,
+  onRefresh,
+  loading
+}) {
   return (
-    <div className="space-y-6">
-      {/* 4 Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Net Balance</span>
-            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600">
-              <Icon name="wallet" className="w-4 h-4" />
-            </div>
+    <div className="p-5 space-y-4">
+      {/* Header Greeting */}
+      <div className="flex items-center justify-between pt-1">
+        <div>
+          <div className="text-xs font-medium text-[#404944] dark:text-[#C0C9C3]">{greeting}</div>
+          <div className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">{userName}</div>
+        </div>
+        <button
+          onClick={onRefresh}
+          className="w-9 h-9 rounded-full bg-white dark:bg-[#191D1B] border border-[#DCE5DF] dark:border-[#404944] flex items-center justify-center text-[#0F6D54] dark:text-[#8AD5BB] shadow-sm active:scale-95"
+          title="Refresh Dashboard"
+        >
+          <Icon name="refresh-cw" className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+
+      {/* Signature Primary Balance Card (Gradient matching Android AccentCardBackground) */}
+      <div className="rounded-3xl p-6 text-white shadow-lg bg-gradient-to-br from-[#0F6D54] to-[#074837] relative overflow-hidden elevation-3">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+            <Icon name="wallet" className="w-5 h-5 text-white" />
           </div>
-          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            ${stats.netBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">Calculated across all transactions</div>
+          <span className="text-sm font-medium text-[#D0F0E3]">Current Balance</span>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Monthly Income</span>
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600">
-              <Icon name="trending-up" className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-            +${stats.monthlyIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">Recorded income stream</div>
+        <div className="text-3xl font-extrabold tracking-tight mb-1">
+          {formatCurrency(calculatedBalance)}
         </div>
-
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Active Loans</span>
-            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600">
-              <Icon name="hand-coins" className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            {stats.activeLoansCount}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">Pending full settlement</div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Vocabulary</span>
-            <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600">
-              <Icon name="book-marked" className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            {stats.wordsCount}
-          </div>
-          <div className="text-xs text-slate-400 mt-1">Words in Notebook</div>
+        <div className="text-[11px] text-[#A2DFC7] flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#A6F2D6] animate-pulse"></span>
+          Real-time balance from MongoDB source of truth
         </div>
       </div>
 
-      {/* Grid: Recent Transactions & Quick Shortcuts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">Recent Cashflow</h3>
-            <button
-              onClick={() => onNavigate('transactions')}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1"
-            >
-              <span>View All</span>
-              <Icon name="chevron-right" className="w-3.5 h-3.5" />
-            </button>
+      {/* 3 Metric Cards Row */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-3 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm elevation-1 flex flex-col justify-between">
+          <span className="text-[11px] font-medium text-[#404944] dark:text-[#C0C9C3] leading-tight line-clamp-1">Today's Spends</span>
+          <div className="text-xs font-bold text-[#DC2626] mt-2 truncate">
+            {formatCurrency(todayExpenses)}
           </div>
-
-          {transactions.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-sm">
-              No transactions recorded yet. Click "New Transaction" to begin!
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
-              {transactions.slice(0, 5).map(tx => (
-                <div key={tx._id} className="py-3.5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                      tx.type === 'income'
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600'
-                        : 'bg-red-50 dark:bg-red-950/40 text-red-600'
-                    }`}>
-                      <Icon name={tx.type === 'income' ? 'arrow-down-left' : 'arrow-up-right'} className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white">{tx.title}</div>
-                      <div className="text-xs text-slate-400">{tx.category} • {tx.date ? new Date(tx.date).toLocaleDateString() : 'Recent'}</div>
-                    </div>
-                  </div>
-                  <div className={`text-sm font-bold ${
-                    tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'
-                  }`}>
-                    {tx.type === 'income' ? '+' : '-'}${Number(tx.amount).toFixed(2)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Shortcuts & Travel Widget */}
-        <div className="space-y-6">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-            <h3 className="font-bold text-slate-900 dark:text-white text-base mb-4">Quick Shortcuts</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={onOpenAddTx}
-                className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 text-left transition group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-2 group-hover:scale-105 transition">
-                  <Icon name="plus" className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">New Transaction</div>
-              </button>
-
-              <button
-                onClick={onOpenAddLoan}
-                className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 text-left transition group">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-105 transition">
-                  <Icon name="hand-coins" className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">Record Loan</div>
-              </button>
-
-              <button
-                onClick={() => onNavigate('dictionary')}
-                className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 text-left transition group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center mb-2 group-hover:scale-105 transition">
-                  <Icon name="sparkles" className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">Gemini Lookup</div>
-              </button>
-
-              <button
-                onClick={onOpenAddNote}
-                className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 text-left transition group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center mb-2 group-hover:scale-105 transition">
-                  <Icon name="file-plus" className="w-4 h-4" />
-                </div>
-                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">Create Note</div>
-              </button>
-            </div>
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-3 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm elevation-1 flex flex-col justify-between">
+          <span className="text-[11px] font-medium text-[#404944] dark:text-[#C0C9C3] leading-tight line-clamp-1">You Owe</span>
+          <div className="text-xs font-bold text-[#D97706] mt-2 truncate">
+            {formatCurrency(youOwe)}
           </div>
+        </div>
 
-          {/* Travel Packing Banner */}
-          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6 text-white shadow-lg shadow-indigo-500/20">
-            <div className="flex items-center gap-2 text-indigo-200 text-xs font-semibold uppercase tracking-wider mb-2">
-              <Icon name="plane-takeoff" className="w-4 h-4" />
-              <span>Travel Packing</span>
-            </div>
-            <div className="text-lg font-bold mb-1">
-              {activeTrip ? activeTrip.destination : 'No upcoming trip'}
-            </div>
-            <p className="text-xs text-indigo-100/80 mb-4">
-              {activeTrip ? `${(activeTrip.items || []).filter(i => i.isPacked).length} of ${(activeTrip.items || []).length} items packed` : 'Create a packing checklist for your next voyage.'}
-            </p>
-            <button
-              onClick={() => onNavigate('luggage')}
-              className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-md text-xs font-semibold transition flex items-center gap-2"
-            >
-              <span>Open Luggage Tracker</span>
-              <Icon name="arrow-right" className="w-3.5 h-3.5" />
-            </button>
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-3 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm elevation-1 flex flex-col justify-between">
+          <span className="text-[11px] font-medium text-[#404944] dark:text-[#C0C9C3] leading-tight line-clamp-1">Others Owe</span>
+          <div className="text-xs font-bold text-[#16A34A] mt-2 truncate">
+            {formatCurrency(othersOwe)}
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-// --- Transactions Component ---
-function TransactionsView({ transactions, filter, onFilterChange, onOpenAdd, onDelete, stats }) {
-  const filtered = transactions.filter(t => {
-    if (filter === 'expense') return t.type === 'expense';
-    if (filter === 'income') return t.type === 'income';
-    return true;
-  });
+      {/* Travel Packing Summary Banner */}
+      {activeLuggageTrips > 0 && (
+        <div
+          onClick={() => onQuickAction('luggage')}
+          className="bg-white dark:bg-[#191D1B] rounded-2xl p-3.5 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm elevation-1 flex items-center justify-between cursor-pointer active:scale-98 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#059669]/15 flex items-center justify-center text-[#059669]">
+              <Icon name="luggage" className="w-5 h-5 text-[#059669]" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-[#191C1B] dark:text-[#E1E3DF]">Travel Packing</div>
+              <div className={`text-xs ${pendingPackingCount > 0 ? 'text-[#D97706]' : 'text-[#059669]'}`}>
+                {pendingPackingCount > 0
+                  ? `${pendingPackingCount} items pending across ${activeLuggageTrips} trip(s)`
+                  : `All items packed for upcoming travel!`}
+              </div>
+            </div>
+          </div>
+          <Icon name="chevron-right" className="w-4 h-4 text-[#404944] dark:text-[#C0C9C3]" />
+        </div>
+      )}
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-          {['all', 'expense', 'income'].map(type => (
+      {/* Notes & Documents Banner */}
+      {totalNotesCount > 0 && (
+        <div
+          onClick={() => onQuickAction('add_note')}
+          className="bg-white dark:bg-[#191D1B] rounded-2xl p-3.5 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm elevation-1 flex items-center justify-between cursor-pointer active:scale-98 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#F59E0B]/15 flex items-center justify-center text-[#F59E0B]">
+              <Icon name="file-text" className="w-5 h-5 text-[#F59E0B]" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-[#191C1B] dark:text-[#E1E3DF]">Notes & Documents</div>
+              <div className="text-xs text-[#404944] dark:text-[#C0C9C3]">
+                {totalNotesCount} note(s) saved ({pinnedNotesCount} pinned)
+              </div>
+            </div>
+          </div>
+          <Icon name="chevron-right" className="w-4 h-4 text-[#404944] dark:text-[#C0C9C3]" />
+        </div>
+      )}
+
+      {/* Quick Actions 6-Grid (matching QuickActionsGrid in Android) */}
+      <div className="pt-1">
+        <div className="text-sm font-bold text-[#191C1B] dark:text-[#E1E3DF] mb-2.5">Quick Actions</div>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: '+ Money', key: 'add_money', icon: 'plus-circle' },
+            { label: '+ Expense', key: 'add_expense', icon: 'receipt' },
+            { label: '+ Loan', key: 'add_loan', icon: 'hand-coins' },
+            { label: 'Dictionary', key: 'dictionary', icon: 'book-open' },
+            { label: '+ Note', key: 'add_note', icon: 'edit-3' },
+            { label: 'Luggage', key: 'luggage', icon: 'briefcase' }
+          ].map(action => (
             <button
-              key={type}
-              onClick={() => onFilterChange(type)}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition capitalize ${
-                filter === type ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
-              }`}
+              key={action.key}
+              onClick={() => onQuickAction(action.key)}
+              className="bg-white/80 dark:bg-[#191D1B]/80 hover:bg-white dark:hover:bg-[#191D1B] p-3 rounded-2xl border border-[#DCE5DF]/80 dark:border-[#404944]/60 flex items-center gap-2.5 shadow-sm active:scale-95 transition"
             >
-              {type === 'all' ? 'All' : type === 'expense' ? 'Expenses' : 'Income'}
+              <div className="w-8 h-8 rounded-xl bg-[#A6F2D6] dark:bg-[#00513E] text-[#0F6D54] dark:text-[#A6F2D6] flex items-center justify-center">
+                <Icon name={action.icon} className="w-4 h-4 text-[#0F6D54] dark:text-[#A6F2D6]" />
+              </div>
+              <span className="text-xs font-semibold text-[#191C1B] dark:text-[#E1E3DF]">{action.label}</span>
             </button>
           ))}
         </div>
-        <button
-          onClick={onOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 transition flex items-center gap-2"
-        >
-          <Icon name="plus" className="w-4 h-4" />
-          <span>Add Transaction</span>
-        </button>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="py-16 text-center text-slate-400 text-sm">
-            No transactions found for this filter.
+      {/* Recent Activity List */}
+      <div className="pt-2">
+        <div className="text-sm font-bold text-[#191C1B] dark:text-[#E1E3DF] mb-2.5">Recent Activity</div>
+        {recentTransactions.length === 0 ? (
+          <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-6 text-center border border-[#DCE5DF]/70 dark:border-[#404944]/50">
+            <Icon name="receipt" className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+            <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">No transactions yet</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">Use Quick Actions to add an income or expense</div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-400 text-xs font-semibold uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                <tr>
-                  <th className="py-3.5 px-6">Description</th>
-                  <th className="py-3.5 px-6">Category</th>
-                  <th className="py-3.5 px-6">Date</th>
-                  <th className="py-3.5 px-6 text-right">Amount</th>
-                  <th className="py-3.5 px-6 text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                {filtered.map(tx => (
-                  <tr key={tx._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
-                    <td className="py-4 px-6 font-semibold text-slate-800 dark:text-slate-200">
-                      {tx.title}
-                    </td>
-                    <td className="py-4 px-6">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        {tx.category || 'General'}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-xs text-slate-400">
-                      {tx.date ? new Date(tx.date).toLocaleDateString() : 'Recent'}
-                    </td>
-                    <td className={`py-4 px-6 text-right font-bold ${
-                      tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'
-                    }`}>
-                      {tx.type === 'income' ? '+' : '-'}${Number(tx.amount).toFixed(2)}
-                    </td>
-                    <td className="py-4 px-6 text-center">
-                      <button
-                        onClick={() => onDelete(tx._id)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition"
-                        title="Delete transaction"
-                      >
-                        <Icon name="trash-2" className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {recentTransactions.map(tx => {
+              const isIncome = tx.type === 'income' || tx.type === 'loan_received';
+              return (
+                <div
+                  key={tx._id}
+                  className="bg-white dark:bg-[#191D1B] rounded-2xl p-3 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isIncome ? 'bg-[#16A34A]/15 text-[#16A34A]' : 'bg-[#DC2626]/15 text-[#DC2626]'}`}>
+                      <Icon name={isIncome ? 'arrow-down-left' : 'arrow-up-right'} className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">{tx.category}</div>
+                      {tx.description && <div className="text-[10px] text-gray-400 truncate max-w-[150px]">{tx.description}</div>}
+                    </div>
+                  </div>
+                  <div className={`text-xs font-bold ${isIncome ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+                    {isIncome ? '+ ' : '- '}{formatCurrency(tx.amount)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1553,587 +1258,887 @@ function TransactionsView({ transactions, filter, onFilterChange, onOpenAdd, onD
   );
 }
 
-// --- Loans Component ---
-function LoansView({ loans, filter, onFilterChange, onOpenAdd, onSettle, onDelete }) {
-  const filtered = loans.filter(l => {
-    if (filter === 'lent') return l.type === 'lent';
-    if (filter === 'borrowed') return l.type === 'borrowed';
-    return true;
-  });
+// -------------------------------------------------------------
+// Screen 2: Money & Expenses View (matching MoneyScreen.kt)
+// -------------------------------------------------------------
+function MoneyView({
+  calculatedBalance,
+  totalIncome,
+  totalExpenses,
+  transactions,
+  searchQuery,
+  setSearchQuery,
+  filterType,
+  setFilterType,
+  filterCategory,
+  setFilterCategory,
+  onQuickPreset,
+  onOpenAddModal,
+  onDeleteTransaction,
+  onRefresh,
+  loading
+}) {
+  const filtered = useMemo(() => {
+    return transactions.filter(t => {
+      if (filterType === 'expense' && t.type !== 'expense') return false;
+      if (filterType === 'income' && t.type !== 'income') return false;
+      if (filterCategory !== 'all' && t.category !== filterCategory) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const inCat = (t.category || '').toLowerCase().includes(q);
+        const inDesc = (t.description || '').toLowerCase().includes(q);
+        if (!inCat && !inDesc) return false;
+      }
+      return true;
+    });
+  }, [transactions, filterType, filterCategory, searchQuery]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-          {['all', 'lent', 'borrowed'].map(type => (
-            <button
-              key={type}
-              onClick={() => onFilterChange(type)}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition capitalize ${
-                filter === type ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
-              }`}
-            >
-              {type === 'all' ? 'All Loans' : type === 'lent' ? 'I Lent (Owed to Me)' : 'I Borrowed (I Owe)'}
-            </button>
-          ))}
+    <div className="p-5 space-y-4">
+      {/* Title */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">Money & Expenses</h2>
+          <p className="text-xs text-[#404944] dark:text-[#C0C9C3]">Track income, daily spends & cashflow</p>
         </div>
-        <button
-          onClick={onOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 transition flex items-center gap-2"
-        >
-          <Icon name="plus" className="w-4 h-4" />
-          <span>Record Loan</span>
+        <button onClick={onRefresh} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-[#0F6D54]">
+          <Icon name="refresh-cw" className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-16 text-center text-slate-400 text-sm">
-          No loans found in this category.
+      {/* Wallet Card with Gradient */}
+      <div className="rounded-3xl p-5 text-white shadow-lg bg-gradient-to-r from-[#074836] via-[#0F6D54] to-[#1E9B78]">
+        <div className="text-xs uppercase tracking-wider text-white/80">Current Net Balance</div>
+        <div className="text-2xl font-extrabold mt-1 mb-4">{formatCurrency(calculatedBalance)}</div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-white/20">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+              <Icon name="arrow-down-left" className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div>
+              <div className="text-[10px] text-white/70">Total Income</div>
+              <div className="text-xs font-bold text-white">{formatCurrency(totalIncome)}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+              <Icon name="arrow-up-right" className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div>
+              <div className="text-[10px] text-white/70">Total Expenses</div>
+              <div className="text-xs font-bold text-white">{formatCurrency(totalExpenses)}</div>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map(loan => {
+      </div>
+
+      {/* Quick Spend Shortcuts (Tea, Lunch, Transport, Pocket Money) */}
+      <div>
+        <div className="flex items-center justify-between text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF] mb-2">
+          <span>Quick Spend Shortcuts</span>
+          <span className="text-[10px] font-normal text-gray-400">1-Tap Record</span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {[
+            { label: 'Tea / Chai', cat: 'Meal & Food', amount: 80, type: 'expense' },
+            { label: 'Lunch', cat: 'Meal & Food', amount: 450, type: 'expense' },
+            { label: 'Transport', cat: 'Transport', amount: 300, type: 'expense' },
+            { label: 'Mobile Pkg', cat: 'Bills & Utilities', amount: 800, type: 'expense' },
+            { label: 'Freelance', cat: 'Freelance & Gig', amount: 25000, type: 'income' },
+          ].map(p => (
+            <button
+              key={p.label}
+              onClick={() => onQuickPreset(p.label, p.cat, p.amount, p.type)}
+              className="px-3 py-2 rounded-2xl bg-white dark:bg-[#191D1B] border border-[#DCE5DF] dark:border-[#404944] shadow-sm flex items-center gap-1.5 shrink-0 text-xs font-medium active:scale-95 transition"
+            >
+              <span>{p.label}</span>
+              <span className={`font-bold ${p.type === 'income' ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+                Rs. {p.amount}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Dual Fast Action Buttons */}
+      <div className="grid grid-cols-2 gap-2.5">
+        <button
+          onClick={() => onOpenAddModal('income')}
+          className="py-2.5 px-3 rounded-2xl bg-[#16A34A]/15 border border-[#16A34A]/30 text-[#16A34A] font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition"
+        >
+          <Icon name="trending-up" className="w-4 h-4" />
+          <span>+ Add Income</span>
+        </button>
+
+        <button
+          onClick={() => onOpenAddModal('expense')}
+          className="py-2.5 px-3 rounded-2xl bg-[#DC2626]/15 border border-[#DC2626]/30 text-[#DC2626] font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition"
+        >
+          <Icon name="trending-down" className="w-4 h-4" />
+          <span>- Add Expense</span>
+        </button>
+      </div>
+
+      {/* Search & Filter Chips */}
+      <div className="space-y-2">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search records, descriptions..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 rounded-2xl border border-[#DCE5DF] dark:border-[#404944] bg-white dark:bg-[#191D1B] text-xs"
+          />
+          <Icon name="search" className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2.5 text-gray-400">
+              <Icon name="x" className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Type Filter Chips */}
+        <div className="flex gap-1.5">
+          {[
+            { id: 'all', label: 'All Records' },
+            { id: 'expense', label: 'Expenses' },
+            { id: 'income', label: 'Income' },
+          ].map(chip => (
+            <button
+              key={chip.id}
+              onClick={() => setFilterType(chip.id)}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                filterType === chip.id
+                  ? 'bg-[#A6F2D6] dark:bg-[#00513E] text-[#002117] dark:text-[#A6F2D6] border-transparent font-bold'
+                  : 'bg-white dark:bg-[#191D1B] text-[#404944] dark:text-[#C0C9C3] border-[#DCE5DF] dark:border-[#404944]'
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Transactions List */}
+      <div>
+        <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF] mb-2">
+          Transactions ({filtered.length})
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-6 text-center border border-[#DCE5DF]/70 dark:border-[#404944]/50">
+            <Icon name="receipt" className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+            <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">No matching transactions</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">Adjust filter or tap buttons above to add entries</div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map(tx => {
+              const isIncome = tx.type === 'income' || tx.type === 'loan_received';
+              return (
+                <div
+                  key={tx._id}
+                  className="bg-white dark:bg-[#191D1B] rounded-2xl p-3 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isIncome ? 'bg-[#16A34A]/15 text-[#16A34A]' : 'bg-[#DC2626]/15 text-[#DC2626]'}`}>
+                      <Icon name={isIncome ? 'arrow-down-left' : 'arrow-up-right'} className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">{tx.category}</div>
+                      <div className="text-[10px] text-gray-400 flex items-center gap-2">
+                        <span>{tx.date ? new Date(tx.date).toLocaleDateString() : 'Recent'}</span>
+                        {tx.description && <span className="truncate max-w-[120px]">• {tx.description}</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className={`text-xs font-bold ${isIncome ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+                      {isIncome ? '+ ' : '- '}{formatCurrency(tx.amount)}
+                    </div>
+                    <button
+                      onClick={() => onDeleteTransaction(tx._id)}
+                      className="p-1 rounded text-gray-300 hover:text-red-500 transition"
+                      title="Delete Transaction"
+                    >
+                      <Icon name="trash-2" className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// Screen 3: Loans Tracker View (matching LoansScreen.kt)
+// -------------------------------------------------------------
+function LoansView({ loans, youOwe, othersOwe, filterType, setFilterType, onOpenAddModal, onSettleLoan, onDeleteLoan, onRefresh, loading }) {
+  const filteredLoans = useMemo(() => {
+    return loans.filter(l => {
+      if (filterType === 'lent' && l.type !== 'lent') return false;
+      if (filterType === 'borrowed' && l.type !== 'borrowed') return false;
+      if (filterType === 'settled' && l.status !== 'paid') return false;
+      return true;
+    });
+  }, [loans, filterType]);
+
+  return (
+    <div className="p-5 space-y-4">
+      {/* Title */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">Loans Tracker</h2>
+          <p className="text-xs text-[#404944] dark:text-[#C0C9C3]">Debts, borrowings & settlements</p>
+        </div>
+        <button onClick={onRefresh} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-[#0F6D54]">
+          <Icon name="refresh-cw" className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+
+      {/* Position Cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-4 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#16A34A] mb-1">
+            <Icon name="arrow-up-right" className="w-4 h-4" />
+            <span>Others Owe You</span>
+          </div>
+          <div className="text-lg font-bold text-[#191C1B] dark:text-[#E1E3DF]">{formatCurrency(othersOwe)}</div>
+          <div className="text-[10px] text-gray-400 mt-1">Given to friends / family</div>
+        </div>
+
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-4 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#D97706] mb-1">
+            <Icon name="arrow-down-left" className="w-4 h-4" />
+            <span>You Owe</span>
+          </div>
+          <div className="text-lg font-bold text-[#191C1B] dark:text-[#E1E3DF]">{formatCurrency(youOwe)}</div>
+          <div className="text-[10px] text-gray-400 mt-1">Borrowed / pending payoff</div>
+        </div>
+      </div>
+
+      {/* Add Loan Button */}
+      <button
+        onClick={onOpenAddModal}
+        className="w-full py-3 rounded-2xl bg-[#0F6D54] hover:bg-[#074836] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md active:scale-95 transition"
+      >
+        <Icon name="plus" className="w-4 h-4" />
+        <span>+ Record New Loan</span>
+      </button>
+
+      {/* Filter Chips */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        {[
+          { id: 'all', label: 'All Loans' },
+          { id: 'lent', label: 'To Collect' },
+          { id: 'borrowed', label: 'To Pay' },
+          { id: 'settled', label: 'Settled' },
+        ].map(chip => (
+          <button
+            key={chip.id}
+            onClick={() => setFilterType(chip.id)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition shrink-0 ${
+              filterType === chip.id
+                ? 'bg-[#A6F2D6] dark:bg-[#00513E] text-[#002117] dark:text-[#A6F2D6] border-transparent font-bold'
+                : 'bg-white dark:bg-[#191D1B] text-[#404944] dark:text-[#C0C9C3] border-[#DCE5DF] dark:border-[#404944]'
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Loans List */}
+      <div className="space-y-2.5">
+        {filteredLoans.length === 0 ? (
+          <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-6 text-center border border-[#DCE5DF]/70 dark:border-[#404944]/50">
+            <Icon name="hand-coins" className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+            <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">No loans found</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">Use the button above to record borrowings or lendings</div>
+          </div>
+        ) : (
+          filteredLoans.map(loan => {
             const isLent = loan.type === 'lent';
-            const isSettled = loan.status === 'settled';
+            const isPaid = loan.status === 'paid';
             return (
               <div
                 key={loan._id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-5 shadow-sm space-y-4"
+                className="bg-white dark:bg-[#191D1B] rounded-2xl p-4 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm space-y-2.5"
               >
                 <div className="flex items-center justify-between">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                    isLent
-                      ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400'
-                      : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
-                  }`}>
-                    {isLent ? 'I Lent' : 'I Borrowed'}
-                  </span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
-                    isSettled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                  }`}>
-                    {isSettled ? 'Settled' : 'Pending'}
-                  </span>
-                </div>
-
-                <div>
-                  <h4 className="font-bold text-base text-slate-900 dark:text-white">{loan.personName}</h4>
-                  <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                    ${Number(loan.amount).toFixed(2)}
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${isLent ? 'bg-[#16A34A]/15 text-[#16A34A]' : 'bg-[#D97706]/15 text-[#D97706]'}`}>
+                      {isLent ? 'Lent' : 'Borrowed'}
+                    </span>
+                    <span className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">{loan.personName}</span>
                   </div>
-                  {loan.note && <p className="text-xs text-slate-400 mt-1">{loan.note}</p>}
+
+                  <span className={`text-xs font-bold ${isPaid ? 'text-gray-400 line-through' : isLent ? 'text-[#16A34A]' : 'text-[#D97706]'}`}>
+                    {formatCurrency(loan.amount)}
+                  </span>
                 </div>
 
-                <div className="text-xs text-slate-400 flex items-center gap-1">
-                  <Icon name="calendar" className="w-3.5 h-3.5" />
-                  <span>Due: {loan.dueDate ? new Date(loan.dueDate).toLocaleDateString() : 'No deadline'}</span>
-                </div>
+                {loan.notes && <div className="text-xs text-gray-500 dark:text-gray-400">{loan.notes}</div>}
 
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
-                  {!isSettled ? (
+                <div className="flex items-center justify-between pt-1 text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-800">
+                  <span>Due: {loan.dueDate ? new Date(loan.dueDate).toLocaleDateString() : 'Flexible'}</span>
+
+                  <div className="flex items-center gap-2">
+                    {!isPaid && (
+                      <button
+                        onClick={() => onSettleLoan(loan._id)}
+                        className="px-2.5 py-1 rounded-lg bg-[#A6F2D6] dark:bg-[#00513E] text-[#002117] dark:text-[#A6F2D6] text-[10px] font-bold hover:opacity-90"
+                      >
+                        Settle
+                      </button>
+                    )}
+                    {isPaid && (
+                      <span className="text-xs text-[#16A34A] font-bold flex items-center gap-1">
+                        <Icon name="check" className="w-3.5 h-3.5" /> Paid
+                      </span>
+                    )}
                     <button
-                      onClick={() => onSettle(loan._id)}
-                      className="flex-1 py-2 px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                      onClick={() => onDeleteLoan(loan._id)}
+                      className="text-gray-300 hover:text-red-500 p-1"
                     >
-                      <Icon name="check" className="w-3.5 h-3.5" />
-                      <span>Mark Settled</span>
+                      <Icon name="trash-2" className="w-3.5 h-3.5" />
                     </button>
-                  ) : (
-                    <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      <Icon name="check-circle" className="w-3.5 h-3.5" />
-                      <span>Paid & Closed</span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => onDelete(loan._id)}
-                    className="p-2 text-slate-400 hover:text-red-500 rounded-xl transition"
-                    title="Delete loan"
-                  >
-                    <Icon name="trash-2" className="w-4 h-4" />
-                  </button>
+                  </div>
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Dictionary Component ---
-function DictionaryView({ query, onQueryChange, mode, onModeChange, onSearch, loading, result, onSave, learnedWords, onDeleteWord }) {
-  return (
-    <div className="space-y-6">
-      {/* Search Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-        <div className="max-w-2xl mx-auto text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-600 border border-purple-200/50 dark:border-purple-800/30">
-            <Icon name="sparkles" className="w-3.5 h-3.5" />
-            <span>Gemini 3.5 Flash Powered</span>
-          </div>
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white">Smart Lexicon & Concept Explainer</h3>
-          <p className="text-slate-500 dark:text-slate-400 text-xs">
-            Look up definitions, pronunciation, real-world examples, analogies, and save to your vocabulary notebook.
-          </p>
-
-          <form onSubmit={onSearch} className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <Icon name="search" className="w-4 h-4" />
-              </span>
-              <input
-                type="text"
-                required
-                placeholder="Enter any word or concept (e.g. Resilience, Pragmatic, Serendipity)..."
-                value={query}
-                onChange={e => onQueryChange(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
-              <button
-                type="button"
-                onClick={() => onModeChange('meaning')}
-                className={`px-3 py-2 text-xs font-semibold rounded-lg transition ${
-                  mode === 'meaning' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'
-                }`}
-              >
-                Meaning
-              </button>
-              <button
-                type="button"
-                onClick={() => onModeChange('explain')}
-                className={`px-3 py-2 text-xs font-semibold rounded-lg transition ${
-                  mode === 'explain' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'
-                }`}
-              >
-                Deep Explain
-              </button>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-2 shrink-0"
-            >
-              {loading ? (
-                <>
-                  <Icon name="loader-2" className="w-4 h-4 animate-spin" />
-                  <span>Looking up...</span>
-                </>
-              ) : (
-                <>
-                  <Icon name="search" className="w-4 h-4" />
-                  <span>Look Up</span>
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Result Card */}
-      {result && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{result.word}</h3>
-                {result.phonetic && (
-                  <span className="text-sm font-mono text-slate-400">{result.phonetic}</span>
-                )}
-                {result.partOfSpeech && (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
-                    {result.partOfSpeech}
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-slate-600 dark:text-slate-300 mt-2 font-medium">
-                {result.shortDefinition || result.fullDefinition}
-              </p>
-            </div>
-            <button
-              onClick={() => onSave(result)}
-              disabled={result.isSaved}
-              className={`px-4 py-2.5 rounded-xl font-semibold text-xs transition flex items-center gap-2 shrink-0 ${
-                result.isSaved
-                  ? 'bg-slate-100 text-slate-400 dark:bg-slate-800'
-                  : 'bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-500/20'
-              }`}
-            >
-              <Icon name={result.isSaved ? 'check' : 'bookmark-plus'} className="w-4 h-4" />
-              <span>{result.isSaved ? 'Saved in Notebook' : 'Save to Notebook'}</span>
-            </button>
-          </div>
-
-          {result.eli5Analogy && (
-            <div className="p-4 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-800/40">
-              <div className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 mb-1 flex items-center gap-1.5">
-                <Icon name="lightbulb" className="w-3.5 h-3.5" />
-                <span>ELI5 Analogy</span>
-              </div>
-              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{result.eli5Analogy}</p>
-            </div>
-          )}
-
-          {result.examples && result.examples.length > 0 && (
-            <div>
-              <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Example Usage</h5>
-              <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                {result.examples.map((ex, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-indigo-500 font-bold">•</span>
-                    <span className="italic">"{ex}"</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {result.synonyms && result.synonyms.length > 0 && (
-            <div>
-              <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Synonyms</h5>
-              <div className="flex flex-wrap gap-1.5">
-                {result.synonyms.map((syn, i) => (
-                  <span key={i} className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    {syn}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Vocabulary Notebook */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="font-bold text-slate-900 dark:text-white">Vocabulary Notebook</h4>
-            <p className="text-xs text-slate-400">Words saved for personal revision and mastery</p>
-          </div>
-          <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            {learnedWords.length} Words
-          </span>
-        </div>
-
-        {learnedWords.length === 0 ? (
-          <div className="py-10 text-center text-slate-400 text-xs">
-            Your notebook is empty. Search any word above and click "Save to Notebook"!
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {learnedWords.map(w => (
-              <div key={w._id} className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-slate-900 dark:text-white">{w.word}</span>
-                  <button
-                    onClick={() => onDeleteWord(w._id)}
-                    className="p-1 text-slate-400 hover:text-red-500 rounded transition"
-                    title="Remove from notebook"
-                  >
-                    <Icon name="trash-2" className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                {w.phonetic && <div className="text-[11px] font-mono text-slate-400">{w.phonetic}</div>}
-                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{w.shortDefinition || w.fullDefinition}</p>
-              </div>
-            ))}
-          </div>
+          })
         )}
       </div>
     </div>
   );
 }
 
-// --- Luggage Component ---
-function LuggageView({ trips, activeTrip, onSelectTrip, onOpenAddTrip, onOpenTemplates, onAddItem, onTogglePacked, onDeleteItem }) {
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemCat, setNewItemCat] = useState('Clothing');
+// -------------------------------------------------------------
+// Screen 4: Luggage & Trips View (matching LuggageScreen.kt)
+// -------------------------------------------------------------
+function LuggageView({ trips, activeTripId, setActiveTripId, onToggleItem, onOpenAddTrip, onOpenAddItem, onRefresh, loading }) {
+  const currentTrip = useMemo(() => trips.find(t => t._id === activeTripId) || trips[0] || null, [trips, activeTripId]);
 
-  const items = activeTrip ? activeTrip.items || [] : [];
-  const packedCount = items.filter(i => i.isPacked).length;
-  const progress = items.length > 0 ? Math.round((packedCount / items.length) * 100) : 0;
+  const items = currentTrip ? currentTrip.items || [] : [];
+  const packedCount = items.filter(i => i.packed).length;
+  const totalCount = items.length;
+  const progressPercent = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          {trips.length > 0 && (
-            <select
-              value={activeTrip ? activeTrip._id : ''}
-              onChange={e => onSelectTrip(e.target.value)}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {trips.map(t => (
-                <option key={t._id} value={t._id}>{t.destination}</option>
-              ))}
-            </select>
-          )}
+    <div className="p-5 space-y-4">
+      {/* Title */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">Luggage & Packing</h2>
+          <p className="text-xs text-[#404944] dark:text-[#C0C9C3]">Travel checklists & baggage limits</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenTemplates}
-            disabled={!activeTrip}
-            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs transition flex items-center gap-1.5"
-          >
-            <Icon name="layers" className="w-4 h-4" />
-            <span>Templates</span>
-          </button>
+        <button onClick={onRefresh} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-[#0F6D54]">
+          <Icon name="refresh-cw" className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+
+      {/* Trip Switcher / Banner */}
+      {currentTrip ? (
+        <div className="rounded-3xl p-5 bg-gradient-to-br from-[#0F6D54] to-[#074837] text-white shadow-lg space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Icon name="map-pin" className="w-4 h-4 text-[#A6F2D6]" />
+              <span className="text-sm font-bold truncate max-w-[200px]">{currentTrip.destination}</span>
+            </div>
+            <span className="text-[11px] text-white/80">{currentTrip.travelDates || 'Upcoming'}</span>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between text-xs text-[#D0F0E3] mb-1 font-semibold">
+              <span>Packing Progress</span>
+              <span>{packedCount} / {totalCount} packed ({progressPercent}%)</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-black/20 overflow-hidden">
+              <div className="h-full bg-[#A6F2D6] transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-6 text-center border border-[#DCE5DF]">
+          <Icon name="luggage" className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+          <div className="text-xs font-bold text-gray-700 dark:text-gray-300">No active trips</div>
           <button
             onClick={onOpenAddTrip}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 transition flex items-center gap-2"
+            className="mt-3 px-4 py-2 rounded-xl bg-[#0F6D54] text-white font-bold text-xs"
+          >
+            + Create Trip
+          </button>
+        </div>
+      )}
+
+      {/* Add Item Action */}
+      {currentTrip && (
+        <div className="flex gap-2">
+          <button
+            onClick={onOpenAddItem}
+            className="flex-1 py-2.5 rounded-2xl bg-[#0F6D54] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm active:scale-95 transition"
           >
             <Icon name="plus" className="w-4 h-4" />
-            <span>New Trip</span>
+            <span>Add Item</span>
+          </button>
+        </div>
+      )}
+
+      {/* Checklist Items */}
+      {currentTrip && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">
+            Items ({items.length})
+          </div>
+
+          {items.length === 0 ? (
+            <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-5 text-center text-xs text-gray-400">
+              No items in packing list. Tap '+ Add Item' above!
+            </div>
+          ) : (
+            items.map(item => (
+              <div
+                key={item._id}
+                onClick={() => onToggleItem(currentTrip._id, item._id)}
+                className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition select-none ${
+                  item.packed
+                    ? 'bg-[#EBF7F2] dark:bg-[#00382A]/30 border-[#A6F2D6]/70 dark:border-[#0F6D54]/50'
+                    : 'bg-white dark:bg-[#191D1B] border-[#DCE5DF] dark:border-[#404944]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-5 h-5 rounded-lg flex items-center justify-center border transition ${
+                      item.packed ? 'bg-[#0F6D54] border-[#0F6D54] text-white' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  >
+                    {item.packed && <Icon name="check" className="w-3.5 h-3.5" />}
+                  </div>
+                  <div>
+                    <div className={`text-xs font-semibold ${item.packed ? 'line-through text-gray-400' : 'text-[#191C1B] dark:text-[#E1E3DF]'}`}>
+                      {item.name}
+                    </div>
+                    <div className="text-[10px] text-gray-400">{item.category} • {item.weightKg || 1} kg</div>
+                  </div>
+                </div>
+
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.packed ? 'bg-[#A6F2D6] text-[#002117]' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+                  {item.packed ? 'Packed' : 'Pending'}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// Screen 5: More & Settings Screen (matching SettingsScreen.kt)
+// -------------------------------------------------------------
+function MoreView({ user, onNavigateToDictionary, onNavigateToNotes, onNavigateToLuggage, onTestGemini, geminiTesting, geminiTestResult, darkMode, setDarkMode, onLogout }) {
+  return (
+    <div className="p-5 space-y-4">
+      <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">Settings & Modules</h2>
+
+      {/* Profile Card */}
+      <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-4 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm flex items-center gap-3.5">
+        <div className="w-12 h-12 rounded-full bg-[#A6F2D6] dark:bg-[#00513E] text-[#0F6D54] dark:text-[#A6F2D6] flex items-center justify-center text-lg font-bold">
+          {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-[#191C1B] dark:text-[#E1E3DF] truncate">{user.name || 'Personal User'}</div>
+          <div className="text-xs text-gray-400 truncate">{user.email || 'user@manager.app'}</div>
+        </div>
+      </div>
+
+      {/* App Modules */}
+      <div>
+        <div className="text-xs font-bold text-[#0F6D54] dark:text-[#8AD5BB] uppercase tracking-wider mb-2">App Modules & Features</div>
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl border border-[#DCE5DF]/70 dark:border-[#404944]/50 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+          <button
+            onClick={onNavigateToDictionary}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 text-left transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
+                <Icon name="book-open" className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">AI Smart Dictionary</div>
+                <div className="text-[10px] text-gray-400">Word definitions, analogies & Gemini test</div>
+              </div>
+            </div>
+            <Icon name="chevron-right" className="w-4 h-4 text-gray-400" />
+          </button>
+
+          <button
+            onClick={onNavigateToNotes}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 text-left transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center">
+                <Icon name="file-text" className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Notes & Documents</div>
+                <div className="text-[10px] text-gray-400">Personal notes, checklists & pinned docs</div>
+              </div>
+            </div>
+            <Icon name="chevron-right" className="w-4 h-4 text-gray-400" />
+          </button>
+
+          <button
+            onClick={onNavigateToLuggage}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 text-left transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center">
+                <Icon name="luggage" className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Luggage & Packing</div>
+                <div className="text-[10px] text-gray-400">Trip checklists and baggage management</div>
+              </div>
+            </div>
+            <Icon name="chevron-right" className="w-4 h-4 text-gray-400" />
           </button>
         </div>
       </div>
 
-      {!activeTrip ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-16 text-center text-slate-400 text-sm">
-          No travel trips created yet. Click "New Trip" to start packing!
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">{activeTrip.destination}</h3>
-              <p className="text-xs text-slate-400 mt-0.5">{activeTrip.travelDates || 'Dates upcoming'}</p>
+      {/* Gemini AI Live Status & Verification Card */}
+      <div>
+        <div className="text-xs font-bold text-[#0F6D54] dark:text-[#8AD5BB] uppercase tracking-wider mb-2">Gemini AI Engine</div>
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-4 border border-[#DCE5DF]/70 dark:border-[#404944]/50 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Icon name="sparkles" className="w-4 h-4 text-[#0F6D54] dark:text-[#8AD5BB]" />
+              <span className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Gemini Integration</span>
             </div>
-            <div className="w-full sm:w-48">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-500 mb-1">
-                <span>Packing Progress</span>
-                <span>{progress}%</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#A6F2D6] text-[#002117]">
+              gemini-2.5-flash
+            </span>
+          </div>
+
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+            Verify real-time communication between Personal Life Manager and Google Gemini API.
+          </p>
+
+          <button
+            onClick={onTestGemini}
+            disabled={geminiTesting}
+            className="w-full py-2.5 rounded-xl bg-[#0F6D54] hover:bg-[#074836] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition disabled:opacity-50"
+          >
+            <Icon name="zap" className={`w-3.5 h-3.5 ${geminiTesting ? 'animate-bounce' : ''}`} />
+            <span>{geminiTesting ? 'Testing Gemini API...' : 'Test Gemini AI Live'}</span>
+          </button>
+
+          {geminiTestResult && (
+            <div className={`p-3 rounded-xl text-xs ${geminiTestResult.success ? 'bg-[#EBF7F2] text-[#002117] border border-[#A6F2D6]' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              <div className="font-bold flex items-center gap-1.5 mb-1">
+                <Icon name={geminiTestResult.success ? "check-circle" : "alert-circle"} className="w-4 h-4" />
+                <span>{geminiTestResult.success ? 'Gemini API is WORKING!' : 'Gemini Test Returned Error'}</span>
               </div>
-              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-600 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
+              <div className="text-[11px] opacity-90">
+                {geminiTestResult.reply || geminiTestResult.message}
               </div>
+              {geminiTestResult.maskedKey && (
+                <div className="text-[9px] text-gray-400 mt-1">Key: {geminiTestResult.maskedKey}</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* System Configuration */}
+      <div>
+        <div className="text-xs font-bold text-[#0F6D54] dark:text-[#8AD5BB] uppercase tracking-wider mb-2">Configuration</div>
+        <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-4 border border-[#DCE5DF]/70 dark:border-[#404944]/50 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-[#191C1B] dark:text-[#E1E3DF]">Default Currency</span>
+            <span className="font-bold text-[#0F6D54] dark:text-[#8AD5BB]">PKR (Rs.)</span>
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-100 dark:border-gray-800">
+            <span className="font-medium text-[#191C1B] dark:text-[#E1E3DF]">Dark Appearance</span>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`w-10 h-6 rounded-full p-1 transition-colors ${darkMode ? 'bg-[#0F6D54]' : 'bg-gray-300'}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform ${darkMode ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Logout Button */}
+      <button
+        onClick={onLogout}
+        className="w-full py-3 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-bold text-xs flex items-center justify-center gap-2 border border-red-200 dark:border-red-900/50 hover:bg-red-100 transition"
+      >
+        <Icon name="log-out" className="w-4 h-4" />
+        <span>Sign Out</span>
+      </button>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// Subscreen: Dictionary & AI Lexicon (matching DictionaryScreen.kt)
+// -------------------------------------------------------------
+function DictionarySubscreen({ dictWord, setDictWord, dictMode, setDictMode, dictResult, dictLoading, onLookup, onBack, geminiTestResult, geminiTesting, onTestGemini }) {
+  return (
+    <div className="p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <button onClick={onBack} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+          <Icon name="arrow-left" className="w-5 h-5 text-[#0F6D54]" />
+        </button>
+        <div>
+          <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">AI Smart Dictionary</h2>
+          <p className="text-xs text-[#404944] dark:text-[#C0C9C3]">Gemini-powered vocabulary & deep explanations</p>
+        </div>
+      </div>
+
+      {/* Search Input */}
+      <form onSubmit={onLookup} className="space-y-2">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Enter any English word or phrase..."
+            value={dictWord}
+            onChange={e => setDictWord(e.target.value)}
+            className="w-full pl-9 pr-16 py-3 rounded-2xl border border-[#DCE5DF] dark:border-[#404944] bg-white dark:bg-[#191D1B] text-sm font-semibold"
+          />
+          <Icon name="search" className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
+          <button
+            type="submit"
+            disabled={dictLoading}
+            className="absolute right-2 top-2 px-3 py-1.5 rounded-xl bg-[#0F6D54] text-white font-bold text-xs"
+          >
+            {dictLoading ? '...' : 'Explain'}
+          </button>
+        </div>
+
+        {/* Mode Selector */}
+        <div className="flex gap-1 overflow-x-auto no-scrollbar">
+          {[
+            { id: 'meaning', label: 'Definition & Nuance' },
+            { id: 'urdu', label: 'Urdu Context' },
+            { id: 'eli5', label: 'Simple Analogy' },
+            { id: 'business', label: 'Professional' }
+          ].map(m => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setDictMode(m.id)}
+              className={`px-3 py-1 rounded-xl text-[11px] font-semibold border shrink-0 transition ${
+                dictMode === m.id
+                  ? 'bg-[#A6F2D6] dark:bg-[#00513E] text-[#002117] dark:text-[#A6F2D6] border-transparent font-bold'
+                  : 'bg-white dark:bg-[#191D1B] text-gray-500 border-gray-200 dark:border-gray-800'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </form>
+
+      {/* Gemini Live Test Quick Box */}
+      <div className="bg-[#EBF7F2] dark:bg-[#082B21] rounded-2xl p-3.5 border border-[#A6F2D6] dark:border-[#0F6D54] flex items-center justify-between">
+        <div>
+          <div className="text-xs font-bold text-[#002117] dark:text-[#A6F2D6] flex items-center gap-1.5">
+            <Icon name="sparkles" className="w-3.5 h-3.5 text-[#0F6D54]" />
+            <span>Gemini AI Engine</span>
+          </div>
+          <div className="text-[10px] text-[#002117]/80 dark:text-[#A6F2D6]/80 mt-0.5">
+            Test real-time AI generation status
+          </div>
+        </div>
+        <button
+          onClick={onTestGemini}
+          disabled={geminiTesting}
+          className="px-3 py-1.5 rounded-xl bg-[#0F6D54] text-white text-xs font-bold shadow-sm"
+        >
+          {geminiTesting ? 'Pinging...' : 'Test API'}
+        </button>
+      </div>
+
+      {geminiTestResult && (
+        <div className="p-3 rounded-2xl bg-white dark:bg-[#191D1B] border border-[#DCE5DF] text-xs">
+          <span className="font-bold text-[#0F6D54]">API Test Response: </span>
+          <span>{geminiTestResult.reply || geminiTestResult.message}</span>
+        </div>
+      )}
+
+      {/* Word Result Card */}
+      {dictResult && (
+        <div className="bg-white dark:bg-[#191D1B] rounded-3xl p-5 border border-[#DCE5DF] dark:border-[#404944] shadow-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-bold text-[#0F6D54] dark:text-[#8AD5BB]">{dictResult.word}</div>
+              <div className="text-xs text-gray-400 font-mono mt-0.5">
+                {dictResult.phonetic} • {dictResult.partOfSpeech}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if ('speechSynthesis' in window) {
+                  const utterance = new SpeechSynthesisUtterance(dictResult.word);
+                  window.speechSynthesis.speak(utterance);
+                }
+              }}
+              className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[#0F6D54]"
+              title="Pronounce"
+            >
+              <Icon name="volume-2" className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div>
+            <div className="text-[11px] uppercase font-bold text-gray-400 mb-1">Definition</div>
+            <div className="text-xs text-[#191C1B] dark:text-[#E1E3DF] leading-relaxed">
+              {dictResult.shortDefinition || dictResult.fullDefinition}
             </div>
           </div>
 
-          {/* Add Item Row */}
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              onAddItem(activeTrip._id, newItemName, newItemCat);
-              setNewItemName('');
-            }}
-            className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-slate-100 dark:border-slate-800"
-          >
-            <input
-              type="text"
-              required
-              placeholder="Add luggage item (e.g. Passport, Charger, Raincoat)..."
-              value={newItemName}
-              onChange={e => setNewItemName(e.target.value)}
-              className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <select
-              value={newItemCat}
-              onChange={e => setNewItemCat(e.target.value)}
-              className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none"
-            >
-              <option value="Clothing">Clothing</option>
-              <option value="Electronics">Electronics</option>
-              <option value="Toiletries">Toiletries</option>
-              <option value="Documents">Documents</option>
-              <option value="Essentials">Essentials</option>
-            </select>
-            <button
-              type="submit"
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition"
-            >
-              Add Item
-            </button>
-          </form>
+          {dictResult.eli5Analogy && (
+            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50">
+              <div className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase mb-0.5">Analogy (ELI5)</div>
+              <div className="text-xs text-amber-900 dark:text-amber-200">{dictResult.eli5Analogy}</div>
+            </div>
+          )}
 
-          {/* Items List */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
-            {items.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 text-xs">
-                Packing list is empty. Add an item above or use a Template!
+          {dictResult.examples && dictResult.examples.length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase font-bold text-gray-400 mb-1">Example</div>
+              <div className="text-xs italic text-gray-600 dark:text-gray-300">"{dictResult.examples[0]}"</div>
+            </div>
+          )}
+
+          {dictResult.synonyms && dictResult.synonyms.length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase font-bold text-gray-400 mb-1">Synonyms</div>
+              <div className="flex flex-wrap gap-1.5">
+                {dictResult.synonyms.map(s => (
+                  <span key={s} className="px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-[11px] text-gray-600 dark:text-gray-300">
+                    {s}
+                  </span>
+                ))}
               </div>
-            ) : (
-              items.map(it => (
-                <div key={it._id} className="py-3 flex items-center justify-between">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={it.isPacked}
-                      onChange={() => onTogglePacked(activeTrip._id, it._id)}
-                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className={`text-sm font-medium ${it.isPacked ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                      {it.name}
-                    </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500">
-                      {it.category}
-                    </span>
-                  </label>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// Subscreen: Notes & Documents (matching NotesScreen.kt)
+// -------------------------------------------------------------
+function NotesSubscreen({ notes, notesSearch, setNotesSearch, notesCategory, setNotesCategory, onPin, onDelete, onOpenAdd, onBack }) {
+  const filtered = useMemo(() => {
+    return notes.filter(n => {
+      if (notesCategory !== 'all' && n.category !== notesCategory) return false;
+      if (notesSearch.trim()) {
+        const q = notesSearch.toLowerCase();
+        return (n.title || '').toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [notes, notesSearch, notesCategory]);
+
+  return (
+    <div className="p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button onClick={onBack} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+            <Icon name="arrow-left" className="w-5 h-5 text-[#0F6D54]" />
+          </button>
+          <div>
+            <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">Notes & Docs</h2>
+            <p className="text-xs text-[#404944] dark:text-[#C0C9C3]">Personal scratchpad & checklists</p>
+          </div>
+        </div>
+
+        <button
+          onClick={onOpenAdd}
+          className="px-3 py-1.5 rounded-xl bg-[#0F6D54] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm"
+        >
+          <Icon name="plus" className="w-3.5 h-3.5" />
+          <span>New</span>
+        </button>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search your notes..."
+          value={notesSearch}
+          onChange={e => setNotesSearch(e.target.value)}
+          className="w-full pl-9 pr-4 py-2.5 rounded-2xl border border-[#DCE5DF] dark:border-[#404944] bg-white dark:bg-[#191D1B] text-xs"
+        />
+        <Icon name="search" className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+      </div>
+
+      {/* Notes List */}
+      <div className="space-y-2.5">
+        {filtered.length === 0 ? (
+          <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-6 text-center border border-[#DCE5DF] text-xs text-gray-400">
+            No notes found. Tap 'New' above to write a note!
+          </div>
+        ) : (
+          filtered.map(note => (
+            <div
+              key={note._id}
+              className={`p-4 rounded-2xl border shadow-sm space-y-2 transition ${
+                note.isPinned
+                  ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40'
+                  : 'bg-white dark:bg-[#191D1B] border-[#DCE5DF] dark:border-[#404944]'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#0F6D54] dark:text-[#8AD5BB]">
+                    {note.category || 'General'}
+                  </span>
+                  <div className="text-sm font-bold text-[#191C1B] dark:text-[#E1E3DF]">{note.title}</div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
                   <button
-                    onClick={() => onDeleteItem(activeTrip._id, it._id)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 rounded transition"
+                    onClick={() => onPin(note._id)}
+                    className={`p-1.5 rounded-lg ${note.isPinned ? 'text-amber-600' : 'text-gray-300 hover:text-amber-500'}`}
+                    title={note.isPinned ? "Unpin note" : "Pin note to top"}
+                  >
+                    <Icon name="pin" className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(note._id)}
+                    className="p-1.5 rounded-lg text-gray-300 hover:text-red-500"
+                    title="Delete Note"
                   >
                     <Icon name="trash-2" className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- Notes Component ---
-function NotesView({ notes, search, onSearchChange, onOpenAdd, onTogglePin, onDelete }) {
-  const filtered = notes.filter(n => {
-    const q = search.toLowerCase();
-    return (n.title || '').toLowerCase().includes(q) || (n.content || '').toLowerCase().includes(q) || (n.category || '').toLowerCase().includes(q);
-  });
-
-  const pinnedNotes = filtered.filter(n => n.isPinned);
-  const otherNotes = filtered.filter(n => !n.isPinned);
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="relative w-full sm:w-72">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-            <Icon name="search" className="w-4 h-4" />
-          </span>
-          <input
-            type="text"
-            placeholder="Search notes..."
-            value={search}
-            onChange={e => onSearchChange(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-          />
-        </div>
-        <button
-          onClick={onOpenAdd}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md shadow-indigo-500/20 transition flex items-center gap-2"
-        >
-          <Icon name="plus" className="w-4 h-4" />
-          <span>Create Note</span>
-        </button>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-16 text-center text-slate-400 text-sm">
-          No notes match your query. Click "Create Note" to add one!
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {pinnedNotes.length > 0 && (
-            <div className="space-y-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                <Icon name="pin" className="w-3.5 h-3.5" />
-                <span>Pinned Notes</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {pinnedNotes.map(note => (
-                  <NoteCard key={note._id} note={note} onTogglePin={onTogglePin} onDelete={onDelete} />
-                ))}
-              </div>
+
+              <p className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                {note.content}
+              </p>
             </div>
-          )}
-
-          {otherNotes.length > 0 && (
-            <div className="space-y-3">
-              {pinnedNotes.length > 0 && (
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Other Notes</div>
-              )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {otherNotes.map(note => (
-                  <NoteCard key={note._id} note={note} onTogglePin={onTogglePin} onDelete={onDelete} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function NoteCard({ note, onTogglePin, onDelete }) {
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-5 shadow-sm space-y-3 flex flex-col justify-between">
-      <div>
-        <div className="flex items-start justify-between gap-2">
-          <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight">{note.title}</h4>
-          <button
-            onClick={() => onTogglePin(note._id)}
-            className={`p-1 rounded transition ${note.isPinned ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-            title={note.isPinned ? 'Unpin note' : 'Pin note'}
-          >
-            <Icon name="pin" className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <p className="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed whitespace-pre-line">
-          {note.content}
-        </p>
-      </div>
-      <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-semibold">
-          {note.category || 'General'}
-        </span>
-        <button
-          onClick={() => onDelete(note._id)}
-          className="p-1 text-slate-400 hover:text-red-500 rounded transition"
-          title="Delete note"
-        >
-          <Icon name="trash-2" className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// --- Settings Component ---
-function SettingsView({ user, darkMode, onToggleDarkMode, onLogout, onTestHealth }) {
-  return (
-    <div className="max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm space-y-6">
-      <h3 className="font-bold text-slate-900 dark:text-white text-base">Account Information</h3>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <span className="text-sm text-slate-500 dark:text-slate-400">Name</span>
-          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{user.name}</span>
-        </div>
-        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <span className="text-sm text-slate-500 dark:text-slate-400">Email</span>
-          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{user.email}</span>
-        </div>
-        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <span className="text-sm text-slate-500 dark:text-slate-400">Interface Theme</span>
-          <button
-            onClick={onToggleDarkMode}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center gap-2"
-          >
-            <Icon name={darkMode ? 'sun' : 'moon'} className="w-3.5 h-3.5" />
-            <span>{darkMode ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
-        </div>
-        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <span className="text-sm text-slate-500 dark:text-slate-400">Backend Server Health</span>
-          <button
-            onClick={onTestHealth}
-            className="px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-semibold transition"
-          >
-            Test Connection
-          </button>
-        </div>
-      </div>
-      <div className="pt-2">
-        <button
-          onClick={onLogout}
-          className="px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400 text-xs font-bold transition flex items-center gap-2"
-        >
-          <Icon name="log-out" className="w-4 h-4" />
-          <span>Sign Out</span>
-        </button>
+          ))
+        )}
       </div>
     </div>
   );
@@ -2142,15 +2147,12 @@ function SettingsView({ user, darkMode, onToggleDarkMode, onLogout, onTestHealth
 // --- Generic Modal Shell ---
 function Modal({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-100 dark:border-slate-800 shadow-2xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-base text-slate-900 dark:text-white">{title}</h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
-          >
-            <Icon name="x" className="w-5 h-5" />
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-sm bg-white dark:bg-[#191D1B] rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-gray-200 dark:border-gray-800 animate-slide-up">
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800 mb-4">
+          <h3 className="text-sm font-bold text-[#191C1B] dark:text-[#E1E3DF]">{title}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400">
+            <Icon name="x" className="w-4 h-4" />
           </button>
         </div>
         {children}
@@ -2159,6 +2161,108 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-// Render React 18 Application
+// --- Auth Component (Login / Register) ---
+function AuthForm({ onLogin, onRegister, onDemo }) {
+  const [isRegister, setIsRegister] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isRegister) {
+      onRegister(name, email, password);
+    } else {
+      onLogin(email, password);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3.5 text-left">
+      {isRegister && (
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
+          <div className="relative">
+            <input
+              type="text"
+              required
+              placeholder="e.g. Alex Johnson"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-xs font-medium text-[#191C1B] dark:text-[#E1E3DF]"
+            />
+            <Icon name="user" className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
+        <div className="relative">
+          <input
+            type="email"
+            required
+            placeholder="user@example.com"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-xs font-medium text-[#191C1B] dark:text-[#E1E3DF]"
+          />
+          <Icon name="mail" className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Password</label>
+        <div className="relative">
+          <input
+            type={showPassword ? "text" : "password"}
+            required
+            placeholder="••••••••"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#101413] text-xs font-medium text-[#191C1B] dark:text-[#E1E3DF]"
+          />
+          <Icon name="lock" className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+          >
+            <Icon name={showPassword ? "eye-off" : "eye"} className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-3 rounded-xl bg-[#0F6D54] hover:bg-[#074836] text-white font-bold text-xs shadow-md active:scale-95 transition"
+      >
+        {isRegister ? 'Create Account' : 'Sign In'}
+      </button>
+
+      {/* Demo Account Button */}
+      <button
+        type="button"
+        onClick={onDemo}
+        className="w-full py-2.5 rounded-xl bg-[#A6F2D6] dark:bg-[#00513E] text-[#002117] dark:text-[#A6F2D6] font-bold text-xs hover:opacity-90 transition"
+      >
+        ⚡ Instant Demo Access
+      </button>
+
+      <div className="text-center pt-2">
+        <button
+          type="button"
+          onClick={() => setIsRegister(!isRegister)}
+          className="text-xs text-[#0F6D54] dark:text-[#8AD5BB] font-semibold hover:underline"
+        >
+          {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Register"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// Mount the React Application
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);

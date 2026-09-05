@@ -1,78 +1,50 @@
-/* LifePulse Web Styles */
-@layer utilities {
-  .nav-btn.active {
-    background-color: rgb(238 242 255);
-    color: rgb(79 70 229);
-  }
-  .dark .nav-btn.active {
-    background-color: rgba(99, 102, 241, 0.15);
-    color: rgb(165 180 252);
-  }
-  .nav-btn:not(.active) {
-    color: rgb(100 116 139);
-  }
-  .nav-btn:not(.active):hover {
-    background-color: rgb(241 245 249);
-    color: rgb(15 23 42);
-  }
-  .dark .nav-btn:not(.active):hover {
-    background-color: rgba(30, 41, 59, 0.5);
-    color: rgb(241 245 249);
-  }
+/* Personal Life Manager - Android Material 3 Web Styles */
+
+/* Android Elevation & Shadows */
+.elevation-1 {
+  box-shadow: 0 1px 3px 0 rgba(15, 109, 84, 0.08), 0 1px 2px -1px rgba(15, 109, 84, 0.04);
 }
 
-.tx-filter-btn.active, .loan-filter-btn.active {
-  background-color: rgb(79 70 229);
-  color: #ffffff;
-}
-.tx-filter-btn:not(.active), .loan-filter-btn:not(.active) {
-  color: rgb(100 116 139);
-}
-.tx-filter-btn:not(.active):hover, .loan-filter-btn:not(.active):hover {
-  background-color: rgb(241 245 249);
-}
-.dark .tx-filter-btn:not(.active):hover, .dark .loan-filter-btn:not(.active):hover {
-  background-color: rgb(30 41 59);
+.elevation-2 {
+  box-shadow: 0 4px 6px -1px rgba(15, 109, 84, 0.1), 0 2px 4px -2px rgba(15, 109, 84, 0.05);
 }
 
-/* Custom Toast Animation */
-.toast-enter {
-  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-.toast-exit {
-  animation: slideOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.elevation-3 {
+  box-shadow: 0 10px 15px -3px rgba(15, 109, 84, 0.12), 0 4px 6px -4px rgba(15, 109, 84, 0.08);
 }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+/* Material 3 Bottom Navigation active pill */
+.m3-nav-pill {
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 
-@keyframes slideOut {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.96);
-  }
+.m3-nav-pill.active {
+  background-color: #A6F2D6;
+  color: #002117;
+  width: 56px;
+  height: 32px;
+  border-radius: 16px;
 }
 
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
+.dark .m3-nav-pill.active {
+  background-color: #00513E;
+  color: #A6F2D6;
 }
 
+/* Material Ripple & Click Feedback */
+button, .clickable-card {
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active, .clickable-card:active {
+  transform: scale(0.97);
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -80,10 +52,33 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
+  background: rgba(15, 109, 84, 0.2);
   border-radius: 9999px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.5);
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(138, 213, 187, 0.2);
 }
+
+/* Device Mockup Shell on desktop */
+.phone-frame {
+  width: 100%;
+  max-width: 440px;
+  height: 100%;
+  max-height: 900px;
+  border-radius: 40px;
+  box-shadow: 0 25px 60px -15px rgba(15, 109, 84, 0.25), 0 0 0 10px #1E2923, 0 0 0 12px #3B4B42;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .phone-frame {
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
