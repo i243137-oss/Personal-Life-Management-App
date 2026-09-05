@@ -42,7 +42,18 @@ app.use('/api/dictionary', dictionaryRoutes);
 app.use('/api/luggage', luggageRoutes);
 app.use('/api/notes', noteRoutes);
 
-// 404 handler
+// Serve static frontend assets
+app.use(express.static(path.join(__dirname, 'public')));
+
+// SPA fallback for frontend client
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// 404 handler for unmatched API routes
 app.use((req, res) => {
   res.status(404).json({
     success: false,

@@ -1,0 +1,89 @@
+/* LifePulse Web Styles */
+@layer utilities {
+  .nav-btn.active {
+    background-color: rgb(238 242 255);
+    color: rgb(79 70 229);
+  }
+  .dark .nav-btn.active {
+    background-color: rgba(99, 102, 241, 0.15);
+    color: rgb(165 180 252);
+  }
+  .nav-btn:not(.active) {
+    color: rgb(100 116 139);
+  }
+  .nav-btn:not(.active):hover {
+    background-color: rgb(241 245 249);
+    color: rgb(15 23 42);
+  }
+  .dark .nav-btn:not(.active):hover {
+    background-color: rgba(30, 41, 59, 0.5);
+    color: rgb(241 245 249);
+  }
+}
+
+.tx-filter-btn.active, .loan-filter-btn.active {
+  background-color: rgb(79 70 229);
+  color: #ffffff;
+}
+.tx-filter-btn:not(.active), .loan-filter-btn:not(.active) {
+  color: rgb(100 116 139);
+}
+.tx-filter-btn:not(.active):hover, .loan-filter-btn:not(.active):hover {
+  background-color: rgb(241 245 249);
+}
+.dark .tx-filter-btn:not(.active):hover, .dark .loan-filter-btn:not(.active):hover {
+  background-color: rgb(30 41 59);
+}
+
+/* Custom Toast Animation */
+.toast-enter {
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.toast-exit {
+  animation: slideOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
