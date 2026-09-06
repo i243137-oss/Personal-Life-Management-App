@@ -44,4 +44,32 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+const optionalProtect = async (req, res, next) => {
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const secret = process.env.JWT_SECRET || 'super_secret_jwt_key_personal_life_manager_2026_dev';
+    const decoded = jwt.verify(token, secret);
+    const user = await User.findById(decoded.id);
+    if (user && user.passwordHash) {
+      delete user.passwordHash;
+    }
+    req.user = user || null;
+  } catch (err) {
+    req.user = null;
+  }
+  next();
+};
+
+module.exports = { protect, optionalProtect };

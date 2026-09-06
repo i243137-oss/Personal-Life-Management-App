@@ -1,161 +1,157 @@
 const Word = require('../models/Word');
 const https = require('https');
+const { lookupWordUnified, getCacheStats, clearCache } = require('../services/dictionaryService');
 
-// Curated high-yield vocabulary knowledge base for instant lookup & offline fallback
-const CURATED_DICTIONARY = {
-  resilience: {
-    word: "Resilience",
-    phonetic: "/rɪˈzɪl.jəns/",
-    partOfSpeech: "noun",
-    shortDefinition: "The capacity to withstand or to recover quickly from difficulties; toughness.",
-    fullDefinition: "The ability of an individual, organization, or system to adapt successfully to stress, adversity, trauma, or significant sources of threat, emerging stronger and more resourceful.",
-    synonyms: ["toughness", "adaptability", "endurance", "grit", "buoyancy", "flexibility"],
-    antonyms: ["fragility", "vulnerability", "weakness", "rigidity"],
-    examples: [
-      "Her mental resilience helped her overcome severe setbacks and complete her medical degree.",
-      "Building economic resilience requires diversifying revenue streams across industries.",
-      "The bamboo tree is known for its remarkable resilience during severe monsoon storms."
-    ],
-    keyPoints: [
-      "Resilience is an active, learned behavior rather than a static genetic trait.",
-      "It involves psychological flexibility, emotional regulation, and social support networks.",
-      "Fostering resilience prevents chronic burnout and accelerates professional recovery."
-    ],
-    eli5Analogy: "Like a rubber ball that gets squeezed or bounced hard against the floor, but immediately pops right back into its original round shape.",
-    keyTakeaway: "Challenges are inevitable, but our capacity to adapt, recover, and rebound is entirely trainable through deliberate reflection and endurance."
-  },
-  serendipity: {
-    word: "Serendipity",
-    phonetic: "/ˌser.ənˈdɪp.ə.ti/",
-    partOfSpeech: "noun",
-    shortDefinition: "The occurrence and development of events by chance in a happy or beneficial way.",
-    fullDefinition: "The fortunate occurrence of discovering desirable, valuable, or agreeable things when least expected, often while searching for something entirely different.",
-    synonyms: ["chance", "happy accident", "fluke", "good fortune", "providence", "luck"],
-    antonyms: ["misfortune", "design", "deliberation", "misadventure"],
-    examples: [
-      "Penicillin was discovered through pure serendipity when Fleming observed mold inhibiting bacteria.",
-      "A chance meeting at a coffee shop led to a serendipitous multi-million-dollar partnership.",
-      "Wandering off the tourist path brought them the serendipity of uncovering a historic courtyard."
-    ],
-    keyPoints: [
-      "Serendipity favors the prepared mind: observing the unexpected requires active curiosity.",
-      "Many scientific breakthroughs (X-rays, microwave ovens, Post-it notes) were serendipitous.",
-      "You can increase your serendipity surface area by meeting diverse people and sharing ideas publicly."
-    ],
-    eli5Analogy: "Looking through your winter coat pockets for a tissue, and unexpectedly pulling out a crisp 1000-rupee note you forgot you had.",
-    keyTakeaway: "Keep your curiosity high; the most transformative opportunities in life frequently disguise themselves as happy accidents."
+/**
+ * Curated educational aids for offline or when Gemini API key is not yet set
+ */
+const CURATED_LEARNING_AIDS = {
+  mitigate: {
+    simple: "To mitigate means to make a bad situation, problem, or pain less severe, less painful, or easier to deal with.",
+    urdu: "کسی تکلیف، شدت یا نقصان کو کم کرنا، ہلکا کرنا یا رفع کرنا۔ (Mitigate = شدت کم کرنا)",
+    academic: "Frequently used in environmental science (climate change mitigation), law (mitigating circumstances), and economics (mitigating financial risk) to denote systematic actions that reduce adverse impacts.",
+    collocations: ["mitigate risk", "mitigate the effects of", "mitigate impact", "mitigate damages", "mitigate circumstances"],
+    mistakes: "Do not confuse 'mitigate' with 'militate'. 'Militate against' means to work against or oppose something, whereas 'mitigate' means to make less severe.",
+    mnemonic: "Think of a 'mitt' (baseball glove) catching a fast hard ball—it softens and 'mitigates' the blow so your hand doesn't hurt.",
+    quiz: {
+      question: "Which of the following actions best illustrates 'mitigating' a risk?",
+      options: [
+        "Ignoring a leak until the pipe bursts",
+        "Installing backup batteries before a storm to avoid power loss",
+        "Selling all assets at a total loss",
+        "Increasing the speed limit during heavy rain"
+      ],
+      correctIndex: 1,
+      explanation: "Installing backup batteries lessens the adverse impact of a power outage, perfectly embodying mitigation."
+    }
   },
   ephemeral: {
-    word: "Ephemeral",
-    phonetic: "/ɪˈfem.ər.əl/",
-    partOfSpeech: "adjective",
-    shortDefinition: "Lasting for a very short time; transient or fleeting.",
-    fullDefinition: "Existing, lasting, or recurring for only a brief period of time; possessing a temporary or momentary existence.",
-    synonyms: ["fleeting", "transient", "momentary", "evanescent", "short-lived", "impermanent"],
-    antonyms: ["permanent", "enduring", "eternal", "perpetual", "everlasting"],
-    examples: [
-      "The ephemeral beauty of cherry blossoms draws millions of admirers each spring.",
-      "Fame on social media can be extraordinarily ephemeral without lasting craftsmanship.",
-      "Morning dew on the lawn is an ephemeral phenomenon that vanishes under the sunrise."
-    ],
-    keyPoints: [
-      "Derived from the Greek word 'ephemeros' meaning 'lasting only a day'.",
-      "In art and literature, ephemerality often intensifies emotional poignancy and value.",
-      "Understanding that unpleasant moments are ephemeral helps maintain emotional perspective."
-    ],
-    eli5Analogy: "Blowing soap bubbles in the afternoon breeze: they shine with gorgeous rainbow colors, but pop in just a few seconds.",
-    keyTakeaway: "Embrace the present moment; recognizing the fleeting nature of life makes genuine experiences all the more precious."
+    simple: "Ephemeral describes something that lasts for only a very brief moment before disappearing.",
+    urdu: "عارضی، چند روزہ، ناپائیدار، یا جلد ختم ہو جانے والی چیز۔ (Ephemeral = عارضی)",
+    academic: "Derived from Greek 'ephemeros' (lasting only a day). Widely employed in literature, botanical taxonomy (ephemeral desert blooms), and digital communication (ephemeral messaging).",
+    collocations: ["ephemeral nature", "ephemeral beauty", "ephemeral pleasures", "ephemeral fame"],
+    mistakes: "Do not use 'ephemeral' for long gradual decline; it implies an inherently transient, short-lived span.",
+    mnemonic: "Sounds like 'a feather will' float away in the wind in just seconds—light and ephemeral.",
+    quiz: {
+      question: "Which phenomenon is most accurately characterized as 'ephemeral'?",
+      options: [
+        "A 200-year-old oak tree",
+        "Morning dew evaporating as soon as the sun rises",
+        "The permanent stone walls of a fortress",
+        "The laws of gravity"
+      ],
+      correctIndex: 1,
+      explanation: "Morning dew vanishes within hours, making it a classic example of ephemerality."
+    }
   },
-  pragmatic: {
-    word: "Pragmatic",
-    phonetic: "/præɡˈmæt.ɪk/",
-    partOfSpeech: "adjective",
-    shortDefinition: "Dealing with things sensibly and realistically based on practical rather than theoretical considerations.",
-    fullDefinition: "Evaluating theories or beliefs in terms of the success of their practical application; guided by measurable outcomes rather than rigid ideology.",
-    synonyms: ["practical", "sensible", "realistic", "down-to-earth", "utilitarian", "hard-headed"],
-    antonyms: ["idealistic", "impractical", "dogmatic", "unrealistic", "visionary"],
-    examples: [
-      "We took a pragmatic approach to the software deadline, focusing on essential features first.",
-      "A pragmatic budget prioritizes food, rent, and emergency savings before luxury upgrades.",
-      "Rather than arguing abstract theory, the council made a pragmatic decision based on historical data."
-    ],
-    keyPoints: [
-      "Pragmatism bridges the gap between ambitious vision and actual feasibility.",
-      "Focuses on 'what actually works' in the real world rather than what sounds perfect on paper.",
-      "Essential for effective project management and financial stewardship."
-    ],
-    eli5Analogy: "If it's pouring rain outside, buying a sturdy umbrella that works right away instead of waiting weeks to design a high-tech rain suit.",
-    keyTakeaway: "Actionable, sensible progress in the real world will always outvalue theoretical perfection that never gets shipped."
+  ubiquitous: {
+    simple: "Ubiquitous means present, appearing, or found everywhere at the same time.",
+    urdu: "ہر جگہ موجود، ہمہ گیر، ہر طرف پایا جانے والا۔ (Ubiquitous = ہمہ گیر / ہرجائی)",
+    academic: "Commonly used in technology sociology ('ubiquitous computing' / pervasive tech) and ecology to indicate comprehensive presence across all sectors or domains.",
+    collocations: ["ubiquitous presence", "become ubiquitous", "ubiquitous technology", "virtually ubiquitous"],
+    mistakes: "Remember that 'ubiquitous' does not mean infinite in quantity; it means widespread in presence and availability.",
+    mnemonic: "UBIQUITOUS = 'U-BI-QUIT-US'? No, it won't quit appearing everywhere you look!",
+    quiz: {
+      question: "What best demonstrates a 'ubiquitous' item in modern society?",
+      options: [
+        "A rare 17th-century postage stamp",
+        "Smartphones in urban areas",
+        "A customized handmade gold coin",
+        "A submarine docked at the South Pole"
+      ],
+      correctIndex: 1,
+      explanation: "Smartphones are present virtually everywhere in modern daily life."
+    }
   },
-  eloquent: {
-    word: "Eloquent",
-    phonetic: "/ˈel.ə.kwənt/",
-    partOfSpeech: "adjective",
-    shortDefinition: "Fluent or persuasive in speaking or writing; clearly expressing feelings or meaning.",
-    fullDefinition: "Characterized by forceful, fluent, and expressive language that touches, inspires, or convinces listeners and readers.",
-    synonyms: ["articulate", "expressive", "fluent", "persuasive", "poignant", "vivid"],
-    antonyms: ["inarticulate", "tongue-tied", "clumsy", "hesitant"],
-    examples: [
-      "The leader delivered an eloquent speech that moved the entire audience to tears.",
-      "Her silence was far more eloquent than any words could have possibly conveyed.",
-      "The architecture is an eloquent testimony to the ancient empire's masonry mastery."
-    ],
-    keyPoints: [
-      "Eloquence is not just about big words; it is about choosing the exact right words with emotional resonance.",
-      "Body language, timing, and vocal cadence play as large a role as written vocabulary.",
-      "Practicing concise speaking builds authentic eloquence in professional leadership."
-    ],
-    eli5Analogy: "Telling a bedtime story so vividly and smoothly that everyone listening can picture the dragons and castles in their head.",
-    keyTakeaway: "True eloquence is clarity combined with heart; express complex ideas simply and sincerely."
+  exacerbate: {
+    simple: "To exacerbate means to make a problem, disease, or bad situation much worse or more severe.",
+    urdu: "معاملے کو بگاڑنا، شدت پیدا کرنا، یا زخم پر نمک چھڑکنا۔ (Exacerbate = بگاڑنا / بڑھا دینا)",
+    academic: "Standard in medical diagnostics (exacerbation of asthma symptoms) and macroeconomic policy (tariffs exacerbating inflation).",
+    collocations: ["exacerbate the problem", "exacerbate tensions", "exacerbate poverty", "exacerbate symptoms"],
+    mistakes: "Do not confuse 'exacerbate' (make worse) with 'exasperate' (greatly irritate or annoy someone).",
+    mnemonic: "EXACERBATE looks like 'EX + ACERB' (acerbic = sharp/acidic). Pouring acid on a wound makes it worse!",
+    quiz: {
+      question: "Which action would 'exacerbate' a debt problem?",
+      options: [
+        "Refinancing at a 0% interest rate",
+        "Taking out high-interest payday loans to pay past loans",
+        "Negotiating a debt forgiveness settlement",
+        "Increasing monthly repayments from savings"
+      ],
+      correctIndex: 1,
+      explanation: "Adding high-interest debt compounds and worsens the financial crisis."
+    }
+  },
+  paradigm: {
+    simple: "A paradigm is a typical example, pattern, or accepted model of how something works or should be done.",
+    urdu: "نمونہ، مثال، فکری سانچہ، یا طریقہ کار۔ (Paradigm = فکری نمونہ / اصول)",
+    academic: "Popularized in epistemology by Thomas Kuhn's 'The Structure of Scientific Revolutions' (paradigm shifts: fundamental changes in underlying assumptions).",
+    collocations: ["paradigm shift", "dominant paradigm", "new paradigm", "programming paradigm"],
+    mistakes: "The 'g' in 'paradigm' is silent (pronounced 'PAIR-uh-dyme').",
+    mnemonic: "PARA-DIGM: Think of a pair of dimes that set the exact mold and standard for all currency coins.",
+    quiz: {
+      question: "What is an example of a 'paradigm shift'?",
+      options: [
+        "Replacing one brand of printer paper with another",
+        "The transition from classical Newtonian mechanics to Einstein's relativity",
+        "Repainting an office wall blue instead of gray",
+        "Sending an email 5 minutes earlier than usual"
+      ],
+      correctIndex: 1,
+      explanation: "Relativity transformed the fundamental conceptual framework of physics, a classic paradigm shift."
+    }
   }
 };
 
 /**
- * Helper to call Gemini REST API if key is present
+ * Call Gemini API specifically for learning assistance (never replaces dictionary data)
  */
-async function callGeminiForDictionary(word, mode, apiKey) {
-  const prompt = mode === 'explain'
-    ? `Explain the concept or word "${word}" thoroughly and clearly.
-Return ONLY a valid, raw JSON object (no markdown formatting, no code block backticks) with this exact schema:
+async function callGeminiLearningAssistant(word, feature, definitionText, apiKey) {
+  let prompt = '';
+
+  switch (feature) {
+    case 'simple':
+      prompt = `For the word "${word}" (definition: "${definitionText || ''}"), provide an extremely clear, accessible plain-English explanation for general readers and English learners. Keep it to 2-3 sentences with one vivid real-life example. Do NOT output markdown code blocks.`;
+      break;
+    case 'urdu':
+      prompt = `For the English word "${word}", provide:
+1. The precise Urdu meaning and script (Nastaliq/Arabic script).
+2. The Roman Urdu transliteration.
+3. A natural Urdu explanation sentence showing its real-world nuance.
+Keep it concise and culturally authentic.`;
+      break;
+    case 'academic':
+      prompt = `For the word "${word}" (definition: "${definitionText || ''}"), explain how this term is applied in scholarly publications, academic research papers, and university textbooks. Provide 2 sophisticated context sentences illustrating academic usage.`;
+      break;
+    case 'collocations':
+      prompt = `For the word "${word}", list the 5 most frequent academic and professional collocations (word pairings), each with a 1-sentence demonstration. Return clean formatted text with bullet points.`;
+      break;
+    case 'mistakes':
+      prompt = `For the word "${word}", identify 1 or 2 common usage mistakes, false friends, or confusingly similar words that non-native and academic writers frequently confuse with it, and clearly distinguish between them.`;
+      break;
+    case 'mnemonic':
+      prompt = `For the word "${word}", provide a clever, memorable mnemonic device or visual memory trick to help a university student permanently remember its meaning and spelling.`;
+      break;
+    case 'quiz':
+      prompt = `Generate a high-yield vocabulary test question for the word "${word}".
+Return ONLY a valid JSON object with:
 {
-  "word": "${word}",
-  "phonetic": "phonetic pronunciation",
-  "partOfSpeech": "part of speech",
-  "shortDefinition": "concise 1-sentence definition",
-  "fullDefinition": "detailed definition",
-  "synonyms": ["3-5 synonyms"],
-  "antonyms": ["2-4 antonyms"],
-  "examples": ["2-3 practical example sentences"],
-  "keyPoints": ["3-4 bullet point takeaways/nuances"],
-  "eli5Analogy": "a creative, vivid 'explain like I'm 5' analogy",
-  "keyTakeaway": "a powerful concluding insight"
-}`
-    : `Provide comprehensive dictionary information for the word "${word}".
-Return ONLY a valid, raw JSON object (no markdown formatting, no code block backticks) with this exact schema:
-{
-  "word": "${word}",
-  "phonetic": "phonetic pronunciation",
-  "partOfSpeech": "part of speech",
-  "shortDefinition": "concise 1-sentence definition",
-  "fullDefinition": "detailed explanation of nuances and usage",
-  "synonyms": ["4-6 synonyms"],
-  "antonyms": ["2-4 antonyms"],
-  "examples": ["3 diverse example sentences"],
-  "keyPoints": ["2-3 practical usage rules or contexts"],
-  "eli5Analogy": "a simple relatable analogy",
-  "keyTakeaway": "core insight"
+  "question": "Question text testing the nuance of ${word}",
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correctIndex": 0,
+  "explanation": "Brief explanation of why the correct option fits best."
 }`;
+      break;
+    default:
+      prompt = `Provide a concise learning insight for the word "${word}" to help a student master its academic nuance.`;
+  }
 
   return new Promise((resolve, reject) => {
     const postData = JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: prompt }]
-        }
-      ],
+      contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1024
+        temperature: 0.3,
+        maxOutputTokens: 600
       }
     });
 
@@ -169,7 +165,8 @@ Return ONLY a valid, raw JSON object (no markdown formatting, no code block back
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-      }
+      },
+      timeout: 8000
     }, (res) => {
       let body = '';
       res.on('data', chunk => body += chunk);
@@ -177,15 +174,20 @@ Return ONLY a valid, raw JSON object (no markdown formatting, no code block back
         try {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             const data = JSON.parse(body);
-            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (rawText) {
-              const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-              const parsed = JSON.parse(cleaned);
-              resolve(parsed);
-              return;
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              if (feature === 'quiz') {
+                const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                try {
+                  return resolve(JSON.parse(cleaned));
+                } catch (e) {
+                  return resolve({ text });
+                }
+              }
+              return resolve({ text: text.trim() });
             }
           }
-          reject(new Error(`Gemini API returned status ${res.statusCode}: ${body}`));
+          reject(new Error(`Gemini API HTTP ${res.statusCode}: ${body}`));
         } catch (e) {
           reject(e);
         }
@@ -193,83 +195,242 @@ Return ONLY a valid, raw JSON object (no markdown formatting, no code block back
     });
 
     req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Gemini API request timed out'));
+    });
+
     req.write(postData);
     req.end();
   });
 }
 
-function synthesizeFallbackWord(queryWord, mode) {
-  const norm = queryWord.toLowerCase().trim();
-  if (CURATED_DICTIONARY[norm]) {
-    return CURATED_DICTIONARY[norm];
-  }
-
-  const capitalized = queryWord.charAt(0).toUpperCase() + queryWord.slice(1);
-  return {
-    word: capitalized,
-    phonetic: `/${norm}/`,
-    partOfSpeech: "noun / concept",
-    shortDefinition: `A significant term or concept representing ${norm} and its associated applications.`,
-    fullDefinition: `${capitalized} refers to the systematic practice, state, or framework characterizing ${norm}, commonly applied across intellectual, professional, and personal development contexts.`,
-    synonyms: ["concept", "principle", "construct", "notion"],
-    antonyms: ["counterpart", "opposite"],
-    examples: [
-      `Applying the principles of ${norm} consistently yields structured outcomes in daily workflows.`,
-      `Understanding the depth of ${norm} allows for informed decision-making during complex challenges.`
-    ],
-    keyPoints: [
-      `Essential for expanding conceptual understanding in modern discourse.`,
-      `Intersects practical execution with deliberate reflection.`
-    ],
-    eli5Analogy: `Like having a special mental tool in your cognitive toolbox that helps you see situations from a clearer angle.`,
-    keyTakeaway: `Mastery of ${norm} begins with identifying its core elements and applying them steadily over time.`
-  };
-}
-
-// Lookup or Explain a word
-exports.lookupWord = async (req, res) => {
+/**
+ * GET /api/dictionary/:word
+ * 
+ * Direct endpoint required by prompt:
+ * 1. Receives word from URL param.
+ * 2. Queries Merriam-Webster Collegiate Dictionary API.
+ * 3. Queries Merriam-Webster Collegiate Thesaurus API.
+ * 4. Normalizes responses into unified format.
+ * 5. Combines results & returns clean response.
+ */
+exports.getWordByParam = async (req, res) => {
   try {
-    const { word, mode = 'meaning' } = req.body;
+    const { word } = req.params;
     if (!word || !word.trim()) {
-      return res.status(400).json({ success: false, message: 'Please provide a word to look up' });
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a word to look up.'
+      });
     }
 
     const trimmed = word.trim();
-    const apiKey = process.env.GEMINI_API_KEY;
+    const result = await lookupWordUnified(trimmed);
 
-    let definition = null;
-    if (apiKey && apiKey !== 'MY_GEMINI_API_KEY' && apiKey !== 'undefined') {
-      try {
-        definition = await callGeminiForDictionary(trimmed, mode, apiKey);
-      } catch (geminiError) {
-        console.warn('Gemini API call failed, using smart dictionary engine:', geminiError.message);
+    // If user is authenticated, check if this word is in their learned vocabulary
+    let isSaved = false;
+    let savedWordId = null;
+    let masteryStatus = null;
+    let personalNotes = null;
+
+    if (req.user && req.user.id) {
+      const existing = await Word.findOne({ userId: req.user.id, word: trimmed });
+      if (existing) {
+        isSaved = true;
+        savedWordId = existing._id;
+        masteryStatus = existing.masteryStatus;
+        personalNotes = existing.personalNotes;
       }
     }
 
-    if (!definition) {
-      definition = synthesizeFallbackWord(trimmed, mode);
+    if (!result.success && (!result.dictionary || !result.thesaurus)) {
+      return res.status(404).json({
+        ...result,
+        isSaved,
+        savedWordId,
+        masteryStatus
+      });
     }
-
-    // Check if user has already saved this word in Learned Words
-    const existing = await Word.findOne({ userId: req.user.id, word: trimmed });
 
     res.json({
-      success: true,
-      data: {
-        ...definition,
-        mode,
-        isSaved: !!existing,
-        savedWordId: existing ? existing._id : null,
-        masteryStatus: existing ? existing.masteryStatus : null
-      }
+      ...result,
+      isSaved,
+      savedWordId,
+      masteryStatus,
+      personalNotes
     });
   } catch (error) {
-    console.error('Error looking up word:', error);
-    res.status(500).json({ success: false, message: error.message || 'Error looking up word' });
+    console.error('Error in getWordByParam:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal error looking up word in dictionary.'
+    });
   }
 };
 
-// Save a word to Learned Words
+/**
+ * POST /api/dictionary/lookup
+ * 
+ * Lookup a word via POST payload { word, skipCache }
+ */
+exports.lookupWord = async (req, res) => {
+  try {
+    const { word, skipCache = false } = req.body;
+    if (!word || !word.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a word to look up'
+      });
+    }
+
+    const trimmed = word.trim();
+    const result = await lookupWordUnified(trimmed, { skipCache });
+
+    // Check if word is already saved in Learned Words notebook
+    let isSaved = false;
+    let savedWordId = null;
+    let masteryStatus = null;
+    let personalNotes = null;
+
+    if (req.user && req.user.id) {
+      const existing = await Word.findOne({ userId: req.user.id, word: trimmed });
+      if (existing) {
+        isSaved = true;
+        savedWordId = existing._id;
+        masteryStatus = existing.masteryStatus;
+        personalNotes = existing.personalNotes;
+      }
+    }
+
+    res.json({
+      success: result.success,
+      data: {
+        ...result,
+        isSaved,
+        savedWordId,
+        masteryStatus,
+        personalNotes
+      },
+      suggestions: result.suggestions || [],
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Error looking up word:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error looking up word in dictionary'
+    });
+  }
+};
+
+/**
+ * POST /api/dictionary/ai-assistant
+ * 
+ * Gemini-powered Learning Assistant
+ * Separated from Merriam-Webster dictionary data.
+ * Provides learning aids: simple, urdu, academic, collocations, mistakes, mnemonic, quiz.
+ */
+exports.aiLearningAssistant = async (req, res) => {
+  try {
+    const { word, feature = 'simple', definition } = req.body;
+    if (!word || !word.trim()) {
+      return res.status(400).json({ success: false, message: 'Word is required' });
+    }
+
+    const trimmed = word.trim().toLowerCase();
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    // 1. If Gemini API key is configured, query Gemini
+    if (apiKey && apiKey !== 'MY_GEMINI_API_KEY' && apiKey !== 'undefined' && apiKey !== 'your_api_key_here') {
+      try {
+        const geminiResult = await callGeminiLearningAssistant(trimmed, feature, definition, apiKey);
+        return res.json({
+          success: true,
+          word: trimmed,
+          feature,
+          source: 'Gemini AI Learning Assistant',
+          data: geminiResult
+        });
+      } catch (geminiErr) {
+        console.warn('Gemini learning assistant call failed, using curated educational aid:', geminiErr.message);
+      }
+    }
+
+    // 2. Curated or synthesized fallback learning aid
+    const curated = CURATED_LEARNING_AIDS[trimmed];
+    if (curated && curated[feature]) {
+      return res.json({
+        success: true,
+        word: trimmed,
+        feature,
+        source: 'Curated Academic Lexicon',
+        data: typeof curated[feature] === 'object' ? curated[feature] : { text: curated[feature] }
+      });
+    }
+
+    // Dynamic educational synthesis when offline / no key
+    let fallbackText = '';
+    switch (feature) {
+      case 'simple':
+        fallbackText = `"${trimmed}" refers to ${definition || 'this core concept'} in clear, everyday terms. Use it when describing situations with precision.`;
+        break;
+      case 'urdu':
+        fallbackText = `The term "${trimmed}" conveys the concept of (${definition || 'a key principle'}). Commonly translated according to context in formal and literary discussions.`;
+        break;
+      case 'academic':
+        fallbackText = `In academic literature and university textbooks, "${trimmed}" is employed as an analytical term to describe systematic patterns and measurable phenomena.`;
+        break;
+      case 'collocations':
+        fallbackText = `• primary ${trimmed}\n• systematic ${trimmed}\n• ${trimmed} analysis\n• practical ${trimmed}`;
+        break;
+      case 'mistakes':
+        fallbackText = `Be careful not to use "${trimmed}" outside of its specific grammatical part of speech. Check the Merriam-Webster entry for exact transitivity and syntax rules.`;
+        break;
+      case 'mnemonic':
+        fallbackText = `Visualize the first syllable of "${trimmed}" associated with a clear mental anchor to easily recall its meaning during exams and reading.`;
+        break;
+      case 'quiz':
+        return res.json({
+          success: true,
+          word: trimmed,
+          feature: 'quiz',
+          source: 'Vocabulary Practice Generator',
+          data: {
+            question: `What is the most accurate definition of the word "${trimmed}"?`,
+            options: [
+              definition || `An essential concept representing ${trimmed}`,
+              `The exact opposite of ${trimmed}`,
+              `A random unrelated term`,
+              `None of the above`
+            ],
+            correctIndex: 0,
+            explanation: `Based on the Merriam-Webster Collegiate Dictionary, option A captures the true sense.`
+          }
+        });
+      default:
+        fallbackText = `Learning guidance for ${trimmed}.`;
+    }
+
+    res.json({
+      success: true,
+      word: trimmed,
+      feature,
+      source: 'Educational Reference',
+      data: { text: fallbackText }
+    });
+  } catch (error) {
+    console.error('Error in aiLearningAssistant:', error);
+    res.status(500).json({ success: false, message: error.message || 'Error generating learning aid' });
+  }
+};
+
+/**
+ * POST /api/dictionary/save
+ * 
+ * Save word to Learned Words vocabulary notebook
+ * Sources Merriam-Webster for definition/thesaurus information.
+ */
 exports.saveWord = async (req, res) => {
   try {
     const {
@@ -281,12 +442,12 @@ exports.saveWord = async (req, res) => {
       fullDefinition,
       synonyms = [],
       antonyms = [],
+      relatedWords = [],
       examples = [],
-      keyPoints = [],
-      eli5Analogy,
-      keyTakeaway,
-      masteryStatus = 'learning',
-      personalNotes
+      etymology,
+      audioUrl,
+      personalNotes,
+      masteryStatus = 'learning'
     } = req.body;
 
     if (!word || !word.trim()) {
@@ -296,39 +457,30 @@ exports.saveWord = async (req, res) => {
     const trimmed = word.trim();
     let wordDoc = await Word.findOne({ userId: req.user.id, word: trimmed });
 
+    const payload = {
+      mode,
+      phonetic,
+      partOfSpeech,
+      shortDefinition,
+      fullDefinition,
+      synonyms,
+      antonyms,
+      relatedWords,
+      examples,
+      etymology,
+      audioUrl,
+      masteryStatus,
+      source: 'Merriam-Webster',
+      personalNotes: personalNotes !== undefined ? personalNotes : (wordDoc ? wordDoc.personalNotes : '')
+    };
+
     if (wordDoc) {
-      wordDoc = await Word.findByIdAndUpdate(wordDoc._id, {
-        mode,
-        phonetic,
-        partOfSpeech,
-        shortDefinition,
-        fullDefinition,
-        synonyms,
-        antonyms,
-        examples,
-        keyPoints,
-        eli5Analogy,
-        keyTakeaway,
-        masteryStatus,
-        personalNotes: personalNotes !== undefined ? personalNotes : wordDoc.personalNotes
-      }, { new: true });
+      wordDoc = await Word.findByIdAndUpdate(wordDoc._id, payload, { new: true });
     } else {
       wordDoc = await Word.create({
         userId: req.user.id,
         word: trimmed,
-        mode,
-        phonetic,
-        partOfSpeech,
-        shortDefinition,
-        fullDefinition,
-        synonyms,
-        antonyms,
-        examples,
-        keyPoints,
-        eli5Analogy,
-        keyTakeaway,
-        masteryStatus,
-        personalNotes
+        ...payload
       });
     }
 
@@ -343,7 +495,11 @@ exports.saveWord = async (req, res) => {
   }
 };
 
-// Get Learned Words with filter & search
+/**
+ * GET /api/dictionary/words
+ * 
+ * Get Learned Words with filter & search
+ */
 exports.getLearnedWords = async (req, res) => {
   try {
     const { status, search } = req.query;
@@ -375,14 +531,21 @@ exports.getLearnedWords = async (req, res) => {
   }
 };
 
-// Update Word Mastery Status
+/**
+ * PATCH /api/dictionary/words/:id/mastery
+ * 
+ * Update mastery status & user personal notes
+ */
 exports.updateMastery = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, personalNotes } = req.body;
 
     if (!['learning', 'reviewing', 'mastered'].includes(status)) {
-      return res.status(400).json({ success: false, message: 'Invalid status. Must be learning, reviewing, or mastered' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be learning, reviewing, or mastered'
+      });
     }
 
     const wordDoc = await Word.findById(id);
@@ -410,7 +573,9 @@ exports.updateMastery = async (req, res) => {
   }
 };
 
-// Delete Word from Notebook
+/**
+ * DELETE /api/dictionary/words/:id
+ */
 exports.deleteLearnedWord = async (req, res) => {
   try {
     const { id } = req.params;
@@ -436,79 +601,9 @@ exports.deleteLearnedWord = async (req, res) => {
   }
 };
 
-// Test Gemini API connectivity
-exports.testGemini = async (req, res) => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined') {
-    return res.status(400).json({
-      success: false,
-      configured: false,
-      message: 'GEMINI_API_KEY is not configured in server environment (.env)'
-    });
-  }
-
-  const postData = JSON.stringify({
-    contents: [
-      {
-        parts: [{ text: "Hello Gemini! Confirm you are working by replying with 'Gemini is fully operational in Personal Life Manager!' in one sentence." }]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 100
-    }
-  });
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-  const parsedUrl = new URL(url);
-
-  const request = https.request({
-    hostname: parsedUrl.hostname,
-    path: parsedUrl.pathname + parsedUrl.search,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(postData)
-    }
-  }, (geminiRes) => {
-    let body = '';
-    geminiRes.on('data', chunk => body += chunk);
-    geminiRes.on('end', () => {
-      try {
-        if (geminiRes.statusCode >= 200 && geminiRes.statusCode < 300) {
-          const data = JSON.parse(body);
-          const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          return res.json({
-            success: true,
-            configured: true,
-            model: 'gemini-2.5-flash',
-            reply: replyText || 'Gemini responded successfully!',
-            maskedKey: apiKey.substring(0, 6) + '...' + apiKey.substring(apiKey.length - 4),
-            timestamp: new Date().toISOString()
-          });
-        }
-        return res.status(geminiRes.statusCode).json({
-          success: false,
-          configured: true,
-          statusCode: geminiRes.statusCode,
-          message: `Gemini API returned HTTP ${geminiRes.statusCode}`,
-          rawResponse: body
-        });
-      } catch (e) {
-        return res.status(500).json({ success: false, message: e.message });
-      }
-    });
-  });
-
-  request.on('error', (err) => {
-    res.status(500).json({ success: false, message: err.message });
-  });
-
-  request.write(postData);
-  request.end();
-};
-
-// Get Vocabulary Summary Stats
+/**
+ * GET /api/dictionary/stats
+ */
 exports.getVocabularyStats = async (req, res) => {
   try {
     const total = await Word.countDocuments({ userId: req.user.id });
@@ -532,3 +627,39 @@ exports.getVocabularyStats = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/dictionary/test-gemini
+ */
+exports.testGemini = async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined' || apiKey === 'your_api_key_here') {
+    return res.status(400).json({
+      success: false,
+      configured: false,
+      message: 'GEMINI_API_KEY is not configured in server environment (.env)'
+    });
+  }
+
+  try {
+    const result = await callGeminiLearningAssistant('mitigate', 'simple', 'to make less severe', apiKey);
+    res.json({
+      success: true,
+      configured: true,
+      model: 'gemini-2.5-flash',
+      reply: result.text,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+/**
+ * GET /api/dictionary/cache/stats
+ */
+exports.getCacheStatus = async (req, res) => {
+  res.json({
+    success: true,
+    cache: getCacheStats()
+  });
+};

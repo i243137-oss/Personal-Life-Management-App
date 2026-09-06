@@ -81,6 +81,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontStyle
@@ -90,9 +95,37 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.AiAssistantData
 import com.example.data.model.WordItemDto
 import com.example.data.model.WordLookupResult
 import com.example.ui.viewmodel.DictionaryViewModel
+
+private fun playAudio(context: Context, url: String?) {
+    if (url.isNullOrBlank()) {
+        Toast.makeText(context, "No audio pronunciation available", Toast.LENGTH_SHORT).show()
+        return
+    }
+    try {
+        val mp = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                    .build()
+            )
+            setDataSource(url)
+            setOnPreparedListener { start() }
+            setOnCompletionListener { release() }
+            setOnErrorListener { _, _, _ ->
+                release()
+                true
+            }
+            prepareAsync()
+        }
+    } catch (_: Exception) {
+        Toast.makeText(context, "Unable to play audio", Toast.LENGTH_SHORT).show()
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -491,7 +524,11 @@ private fun SearchAndLearnTab(
                 WordResultCard(
                     result = uiState.lookupResult,
                     activeMode = uiState.activeMode,
-                    onSaveWord = { status -> dictionaryViewModel.saveCurrentLookup(status) },
+                    aiAssistantData = uiState.aiAssistantData,
+                    isAiAssistantLoading = uiState.isAiAssistantLoading,
+                    activeAiFeature = uiState.activeAiFeature,
+                    onFetchAiAssistant = { feature -> dictionaryViewModel.getAiAssistant(feature) },
+                    onSaveWord = { status, notes -> dictionaryViewModel.saveCurrentLookup(status, notes) },
                     onRemoveWord = { dictionaryViewModel.removeCurrentLookupFromNotebook() },
                     onLookupRelated = { rel -> dictionaryViewModel.lookupWord(rel) }
                 )
@@ -507,17 +544,123 @@ private fun SearchAndLearnTab(
 private fun WordResultCard(
     result: WordLookupResult,
     activeMode: String,
-    onSaveWord: (String) -> Unit,
+    aiAssistantData: AiAssistantData?,
+    isAiAssistantLoading: Boolean,
+    activeAiFeature: String,
+    onFetchAiAssistant: (String) -> Unit,
+    onSaveWord: (String, String?) -> Unit,
     onRemoveWord: () -> Unit,
     onLookupRelated: (String) -> Unit
 ) {
+    val context = LocalContext.current
     var showMasteryMenu by remember { mutableStateOf(false) }
+    var showNoteDialog by remember { mutableStateOf(false) }
+    var noteInput by remember(result.word) { mutableStateOf(result.personalNotes ?: "") }
+
+    val audioUrl = result.audioUrl ?: result.dictionary?.audio?.firstOrNull()?.url
+    val syllables = result.dictionary?.syllables?.takeIf { it.isNotBlank() } ?: result.word
+    val writtenPron = result.dictionary?.pronunciation?.written?.takeIf { it.isNotBlank() } ?: result.phonetic
+    val ipaPron = result.dictionary?.pronunciation?.ipa?.takeIf { it.isNotBlank() }
+    val etymologyText = result.etymology?.takeIf { it.isNotBlank() } ?: result.dictionary?.etymology?.takeIf { it.isNotBlank() }
+    val sourceProvider = result.source?.provider ?: if (result.dictionary != null) "merriam_webster" else "local"
+    val isMwSource = sourceProvider == "merriam_webster" || result.dictionary != null
+    val isGeminiSource = sourceProvider == "gemini"
+    val sourceLabel = when {
+        isMwSource -> "Merriam-Webster Collegiate® Authoritative"
+        isGeminiSource -> "Gemini AI Knowledge Source"
+        else -> "Curated Lexicon (Offline)"
+    }
+    val sourceColor = when {
+        isMwSource -> Color(0xFF1E3A8A)
+        isGeminiSource -> MaterialTheme.colorScheme.primary
+        else -> Color(0xFF4B5563)
+    }
+
+    if (showNoteDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showNoteDialog = false },
+            title = { Text("Personal Study Note") },
+            text = {
+                Column {
+                    Text("Add your own context, translation, or mnemonic for '${result.word}':", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = noteInput,
+                        onValueChange = { noteInput = it },
+                        placeholder = { Text("E.g. Used in research papers; remember to pronounce with stress on 2nd syllable.") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNoteDialog = false
+                        onSaveWord(result.masteryStatus ?: "learning", noteInput)
+                    }
+                ) {
+                    Text("Save Note")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNoteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Main Word Title & Action Card
+        // Authoritative Source Header Pill
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = sourceColor.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, sourceColor.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isMwSource) Icons.Default.Check else Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = sourceColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = sourceLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = sourceColor
+                    )
+                }
+            }
+
+            if (result.thesaurus != null || isMwSource) {
+                Surface(
+                    color = Color(0xFF0D9488).copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "Thesaurus Linked",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color(0xFF0F766E),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+
+        // Main Word Title & Pronunciation Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
@@ -531,22 +674,59 @@ private fun WordResultCard(
                     verticalAlignment = Alignment.Top
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = result.word,
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = result.word,
+                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (!audioUrl.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = { playAudio(context, audioUrl) },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .testTag("dict_audio_pronunciation_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.VolumeUp,
+                                        contentDescription = "Listen to pronunciation",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
 
+                        // Syllables and written/IPA pronunciation
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
-                            if (!result.phonetic.isNullOrBlank()) {
+                            if (syllables != result.word) {
                                 Text(
-                                    text = result.phonetic,
+                                    text = syllables,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            if (!writtenPron.isNullOrBlank()) {
+                                Text(
+                                    text = "\\ $writtenPron \\",
                                     style = MaterialTheme.typography.titleSmall.copy(fontStyle = FontStyle.Italic),
                                     color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            if (!ipaPron.isNullOrBlank()) {
+                                Text(
+                                    text = "[$ipaPron]",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
@@ -605,7 +785,7 @@ private fun WordResultCard(
                                     leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color(0xFFF59E0B)) },
                                     onClick = {
                                         showMasteryMenu = false
-                                        onSaveWord("learning")
+                                        onSaveWord("learning", noteInput)
                                     }
                                 )
                                 DropdownMenuItem(
@@ -613,7 +793,7 @@ private fun WordResultCard(
                                     leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color(0xFF3B82F6)) },
                                     onClick = {
                                         showMasteryMenu = false
-                                        onSaveWord("reviewing")
+                                        onSaveWord("reviewing", noteInput)
                                     }
                                 )
                                 DropdownMenuItem(
@@ -621,7 +801,15 @@ private fun WordResultCard(
                                     leadingIcon = { Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFF10B981)) },
                                     onClick = {
                                         showMasteryMenu = false
-                                        onSaveWord("mastered")
+                                        onSaveWord("mastered", noteInput)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Edit Personal Note") },
+                                    leadingIcon = { Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        showMasteryMenu = false
+                                        showNoteDialog = true
                                     }
                                 )
                                 DropdownMenuItem(
@@ -635,7 +823,7 @@ private fun WordResultCard(
                             }
                         } else {
                             Button(
-                                onClick = { onSaveWord("learning") },
+                                onClick = { onSaveWord("learning", null) },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.testTag("dict_save_word_button")
                             ) {
@@ -661,11 +849,102 @@ private fun WordResultCard(
                         lineHeight = 22.sp
                     )
                 }
+
+                // Personal Note if saved
+                if (result.isSaved && !result.personalNotes.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        color = Color(0xFFFEF9C3).copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().clickable { showNoteDialog = true }
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Note: ${result.personalNotes}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF78350F)
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        // Full Definition & Nuances Card
-        if (!result.fullDefinition.isNullOrBlank()) {
+        // Detailed Merriam-Webster Definitions Card
+        val structuredDefinitions = result.dictionary?.definitions
+        if (!structuredDefinitions.isNullOrEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Merriam-Webster Collegiate® Definitions",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "(${structuredDefinitions.size})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    structuredDefinitions.forEachIndexed { idx, defItem ->
+                        Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                            Row(verticalAlignment = Alignment.Top) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "${idx + 1}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                if (!defItem.partOfSpeech.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "[${defItem.partOfSpeech}]",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = defItem.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    lineHeight = 21.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            if (defItem.examples.isNotEmpty()) {
+                                Column(modifier = Modifier.padding(start = 28.dp, top = 4.dp)) {
+                                    defItem.examples.forEach { ex ->
+                                        Text(
+                                            text = "“$ex”",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (!result.fullDefinition.isNullOrBlank()) {
+            // Fallback Full Definition & Nuances Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -684,6 +963,309 @@ private fun WordResultCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 22.sp
                     )
+                }
+            }
+        }
+
+        // Collegiate Thesaurus Section: Synonyms, Antonyms, and Related Words
+        if (result.synonyms.isNotEmpty() || result.antonyms.isNotEmpty() || result.relatedWords.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Collegiate Thesaurus Insights",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "• tap word to look up",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (result.synonyms.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Synonyms (${result.synonyms.size})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            result.synonyms.forEach { syn ->
+                                Surface(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onLookupRelated(syn) },
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = syn,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (result.antonyms.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Antonyms (${result.antonyms.size})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            result.antonyms.forEach { ant ->
+                                Surface(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onLookupRelated(ant) },
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = ant,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (result.relatedWords.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Related Words (${result.relatedWords.size})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF0F766E)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            result.relatedWords.forEach { rel ->
+                                Surface(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onLookupRelated(rel) },
+                                    color = Color(0xFFCCFBF1),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = rel,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF0F766E),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Word Origin & Etymology Card
+        if (!etymologyText.isNullOrBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🏛️ Word Origin & Etymology",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF92400E)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = etymologyText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF78350F),
+                        lineHeight = 22.sp
+                    )
+                }
+            }
+        }
+
+        // Gemini AI Learning Companion Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDD6FE))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFF7C3AED),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Gemini AI Learning Companion",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF5B21B6)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Pedagogical insights, academic framing, and Urdu explanations:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF6D28D9)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Feature buttons
+                val aiFeatures = listOf(
+                    "simple_explanation" to "Simple English",
+                    "urdu_explanation" to "Urdu (اردو)",
+                    "academic_context" to "Academic Context",
+                    "collocations" to "Collocations",
+                    "common_mistakes" to "Common Mistakes",
+                    "memory_tricks" to "Memory Trick",
+                    "quiz" to "Quiz Me"
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    aiFeatures.forEach { (featKey, label) ->
+                        val isSelected = activeAiFeature == featKey && aiAssistantData != null
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onFetchAiAssistant(featKey) },
+                            color = if (isSelected) Color(0xFF7C3AED) else Color.White,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) Color(0xFF7C3AED) else Color(0xFFDDD6FE))
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (isSelected) Color.White else Color(0xFF6D28D9),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+                }
+
+                // AI Response Content or Loading
+                if (isAiAssistantLoading) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Color(0xFF7C3AED)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Gemini is preparing learning insight...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF6D28D9)
+                        )
+                    }
+                } else if (aiAssistantData != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEDE9FE)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val currentTitle = aiFeatures.find { it.first == aiAssistantData.feature }?.second ?: "Learning Insight"
+                                Text(
+                                    text = currentTitle,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFF5B21B6)
+                                )
+                                if (aiAssistantData.isFallback) {
+                                    Surface(color = Color(0xFFF3F4F6), shape = RoundedCornerShape(4.dp)) {
+                                        Text("Offline Guide", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(4.dp, 2.dp))
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = aiAssistantData.content,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF374151),
+                                lineHeight = 22.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Real-World Examples
+        if (result.examples.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Real-World Examples",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    result.examples.forEachIndexed { idx, example ->
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text(
+                                text = "\"$example\"",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (idx < result.examples.lastIndex) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -764,110 +1346,6 @@ private fun WordResultCard(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Example Sentences
-        if (result.examples.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Real-World Examples",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    result.examples.forEachIndexed { idx, example ->
-                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text(
-                                text = "\"$example\"",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            if (idx < result.examples.lastIndex) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Synonyms & Antonyms Interactive Chips
-        if (result.synonyms.isNotEmpty() || result.antonyms.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    if (result.synonyms.isNotEmpty()) {
-                        Text(
-                            text = "Synonyms (tap to search)",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            result.synonyms.forEach { syn ->
-                                Surface(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onLookupRelated(syn) },
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        text = syn,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (result.antonyms.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Antonyms (tap to search)",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            result.antonyms.forEach { ant ->
-                                Surface(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onLookupRelated(ant) },
-                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        text = ant,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
                         }
                     }
                 }
@@ -1136,6 +1614,7 @@ private fun LearnedWordCard(
     onUpdateMastery: (String) -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
 
     val badgeColor = when (word.masteryStatus.lowercase()) {
@@ -1176,6 +1655,20 @@ private fun LearnedWordCard(
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (!word.audioUrl.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { playAudio(context, word.audioUrl) },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "Listen",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -1247,6 +1740,27 @@ private fun LearnedWordCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            if (!word.personalNotes.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = Color(0xFFFEF9C3).copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(6.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Note: ${word.personalNotes}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF78350F),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

@@ -74,6 +74,24 @@ const wordSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  etymology: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  audioUrl: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  relatedWords: {
+    type: [String],
+    default: [],
+  },
+  source: {
+    type: String,
+    default: 'Merriam-Webster',
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -118,6 +136,10 @@ class WordModelAdapter {
       keyTakeaway: data.keyTakeaway || '',
       masteryStatus: data.masteryStatus || 'learning',
       personalNotes: data.personalNotes || '',
+      etymology: data.etymology || '',
+      audioUrl: data.audioUrl || '',
+      relatedWords: data.relatedWords || [],
+      source: data.source || 'Merriam-Webster',
       createdAt: new Date(),
       updatedAt: new Date(),
       save: async function() { return this; }

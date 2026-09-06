@@ -4,6 +4,63 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
+data class MwPronunciation(
+    @Json(name = "written") val written: String? = null,
+    @Json(name = "ipa") val ipa: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class MwDefinitionItem(
+    @Json(name = "partOfSpeech") val partOfSpeech: String? = null,
+    @Json(name = "text") val text: String = "",
+    @Json(name = "examples") val examples: List<String> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class MwAudioItem(
+    @Json(name = "audio") val audio: String? = null,
+    @Json(name = "url") val url: String? = null,
+    @Json(name = "written") val written: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class MwIdiomItem(
+    @Json(name = "phrase") val phrase: String = "",
+    @Json(name = "definition") val definition: String = ""
+)
+
+@JsonClass(generateAdapter = true)
+data class MwDictionaryDetails(
+    @Json(name = "word") val word: String = "",
+    @Json(name = "syllables") val syllables: String? = null,
+    @Json(name = "pronunciation") val pronunciation: MwPronunciation? = null,
+    @Json(name = "definitions") val definitions: List<MwDefinitionItem> = emptyList(),
+    @Json(name = "examples") val examples: List<String> = emptyList(),
+    @Json(name = "partsOfSpeech") val partsOfSpeech: List<String> = emptyList(),
+    @Json(name = "etymology") val etymology: String? = null,
+    @Json(name = "audio") val audio: List<MwAudioItem> = emptyList(),
+    @Json(name = "idioms") val idioms: List<MwIdiomItem> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class MwThesaurusDetails(
+    @Json(name = "synonyms") val synonyms: List<String> = emptyList(),
+    @Json(name = "antonyms") val antonyms: List<String> = emptyList(),
+    @Json(name = "relatedWords") val relatedWords: List<String> = emptyList(),
+    @Json(name = "similarWords") val similarWords: List<String> = emptyList(),
+    @Json(name = "examples") val examples: List<String> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class MwSourceDetails(
+    @Json(name = "provider") val provider: String? = null,
+    @Json(name = "attribution") val attribution: String? = null,
+    @Json(name = "dictionarySuccess") val dictionarySuccess: Boolean = false,
+    @Json(name = "thesaurusSuccess") val thesaurusSuccess: Boolean = false,
+    @Json(name = "cached") val cached: Boolean = false
+)
+
+@JsonClass(generateAdapter = true)
 data class WordItemDto(
     @Json(name = "_id") val id: String = "",
     @Json(name = "word") val word: String = "",
@@ -14,7 +71,10 @@ data class WordItemDto(
     @Json(name = "fullDefinition") val fullDefinition: String? = null,
     @Json(name = "synonyms") val synonyms: List<String> = emptyList(),
     @Json(name = "antonyms") val antonyms: List<String> = emptyList(),
+    @Json(name = "relatedWords") val relatedWords: List<String> = emptyList(),
     @Json(name = "examples") val examples: List<String> = emptyList(),
+    @Json(name = "etymology") val etymology: String? = null,
+    @Json(name = "audioUrl") val audioUrl: String? = null,
     @Json(name = "keyPoints") val keyPoints: List<String> = emptyList(),
     @Json(name = "eli5Analogy") val eli5Analogy: String? = null,
     @Json(name = "keyTakeaway") val keyTakeaway: String? = null,
@@ -33,13 +93,21 @@ data class WordLookupResult(
     @Json(name = "fullDefinition") val fullDefinition: String? = null,
     @Json(name = "synonyms") val synonyms: List<String> = emptyList(),
     @Json(name = "antonyms") val antonyms: List<String> = emptyList(),
+    @Json(name = "relatedWords") val relatedWords: List<String> = emptyList(),
     @Json(name = "examples") val examples: List<String> = emptyList(),
+    @Json(name = "etymology") val etymology: String? = null,
+    @Json(name = "audioUrl") val audioUrl: String? = null,
     @Json(name = "keyPoints") val keyPoints: List<String> = emptyList(),
     @Json(name = "eli5Analogy") val eli5Analogy: String? = null,
     @Json(name = "keyTakeaway") val keyTakeaway: String? = null,
     @Json(name = "isSaved") val isSaved: Boolean = false,
     @Json(name = "savedWordId") val savedWordId: String? = null,
-    @Json(name = "masteryStatus") val masteryStatus: String? = null
+    @Json(name = "masteryStatus") val masteryStatus: String? = null,
+    @Json(name = "personalNotes") val personalNotes: String? = null,
+    @Json(name = "dictionary") val dictionary: MwDictionaryDetails? = null,
+    @Json(name = "thesaurus") val thesaurus: MwThesaurusDetails? = null,
+    @Json(name = "source") val source: MwSourceDetails? = null,
+    @Json(name = "suggestions") val suggestions: List<String> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -58,7 +126,10 @@ data class SaveWordRequest(
     @Json(name = "fullDefinition") val fullDefinition: String? = null,
     @Json(name = "synonyms") val synonyms: List<String> = emptyList(),
     @Json(name = "antonyms") val antonyms: List<String> = emptyList(),
+    @Json(name = "relatedWords") val relatedWords: List<String> = emptyList(),
     @Json(name = "examples") val examples: List<String> = emptyList(),
+    @Json(name = "etymology") val etymology: String? = null,
+    @Json(name = "audioUrl") val audioUrl: String? = null,
     @Json(name = "keyPoints") val keyPoints: List<String> = emptyList(),
     @Json(name = "eli5Analogy") val eli5Analogy: String? = null,
     @Json(name = "keyTakeaway") val keyTakeaway: String? = null,
@@ -73,10 +144,34 @@ data class UpdateMasteryRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class AiAssistantRequest(
+    @Json(name = "word") val word: String,
+    @Json(name = "feature") val feature: String,
+    @Json(name = "definition") val definition: String? = null,
+    @Json(name = "context") val context: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class AiAssistantData(
+    @Json(name = "word") val word: String = "",
+    @Json(name = "feature") val feature: String = "",
+    @Json(name = "content") val content: String = "",
+    @Json(name = "isFallback") val isFallback: Boolean = false
+)
+
+@JsonClass(generateAdapter = true)
+data class AiAssistantResponse(
+    @Json(name = "success") val success: Boolean,
+    @Json(name = "data") val data: AiAssistantData? = null,
+    @Json(name = "message") val message: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class WordLookupResponse(
     @Json(name = "success") val success: Boolean,
     @Json(name = "data") val data: WordLookupResult? = null,
-    @Json(name = "message") val message: String? = null
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "suggestions") val suggestions: List<String> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -109,3 +204,4 @@ data class VocabularyStatsResponse(
     @Json(name = "data") val data: VocabularyStatsData? = null,
     @Json(name = "message") val message: String? = null
 )
+

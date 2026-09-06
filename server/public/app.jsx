@@ -120,6 +120,12 @@ function App() {
   const [dictMode, setDictMode] = useState('meaning');
   const [dictResult, setDictResult] = useState(null);
   const [dictLoading, setDictLoading] = useState(false);
+  const [dictActiveTab, setDictActiveTab] = useState('search');
+  const [dictSavedWords, setDictSavedWords] = useState([]);
+  const [dictSavedWordsLoading, setDictSavedWordsLoading] = useState(false);
+  const [dictAiAssistantData, setDictAiAssistantData] = useState(null);
+  const [dictAiAssistantLoading, setDictAiAssistantLoading] = useState(false);
+  const [dictAiActiveFeature, setDictAiActiveFeature] = useState(null);
   const [geminiTestResult, setGeminiTestResult] = useState(null);
   const [geminiTesting, setGeminiTesting] = useState(false);
 
@@ -541,36 +547,154 @@ function App() {
     }
   };
 
-  // Dictionary Lookup
-  const handleLookupWord = async (e) => {
-    if (e) e.preventDefault();
-    if (!dictWord.trim()) return;
+  // Dictionary Lookup (Merriam-Webster + Unified Service)
+  const handleLookupWord = async (e, wordOverride) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const targetWord = (wordOverride || dictWord || '').trim();
+    if (!targetWord) return;
+
+    setDictWord(targetWord);
     setDictLoading(true);
     setDictResult(null);
+    setDictAiAssistantData(null);
+    setDictAiActiveFeature(null);
+
     try {
-      const res = await apiRequest('/dictionary/lookup', {
-        method: 'POST',
-        body: JSON.stringify({ word: dictWord.trim(), mode: dictMode })
-      });
-      if (res.data) setDictResult(res.data);
+      // Primary search via GET /api/dictionary/:word (or fallback POST /dictionary/lookup)
+      let res;
+      try {
+        res = await apiRequest(`/dictionary/${encodeURIComponent(targetWord)}`);
+      } catch (getErr) {
+        res = await apiRequest('/dictionary/lookup', {
+          method: 'POST',
+          body: JSON.stringify({ word: targetWord })
+        });
+        if (res.data) res = res.data;
+      }
+
+      if (res) {
+        setDictResult(res);
+        if (res.source?.thesaurusError && res.source?.dictionarySuccess) {
+          addToast('Dictionary loaded (Thesaurus unavailable)', 'info');
+        } else if (res.source?.dictionaryError && res.source?.thesaurusSuccess) {
+          addToast('Thesaurus loaded (Dictionary unavailable)', 'info');
+        } else if (res.success) {
+          addToast(`Found "${res.word}" in Merriam-Webster`, 'success');
+        }
+      }
     } catch (err) {
-      // Offline fallback
-      const w = dictWord.trim();
-      setDictResult({
-        word: w.charAt(0).toUpperCase() + w.slice(1),
-        phonetic: `/${w.toLowerCase()}/`,
-        partOfSpeech: 'noun / concept',
-        shortDefinition: `An essential concept representing ${w} in clear practical context.`,
-        fullDefinition: `In depth, ${w} provides a foundational framework across intellectual, personal, and professional disciplines.`,
-        synonyms: ['clarity', 'focus', 'competence', 'mastery'],
-        antonyms: ['stagnation', 'confusion'],
-        examples: [`Applying ${w} diligently elevated the entire project outcome.`],
-        eli5Analogy: `Think of ${w} like a high-precision Swiss army tool in your cognitive backpack.`,
-        keyTakeaway: `Deliberate awareness of ${w} unlocks sharper decision-making.`
-      });
-      addToast('Definition loaded', 'info');
+      addToast(err.message || 'Dictionary lookup failed', 'error');
     } finally {
       setDictLoading(false);
+    }
+  };
+
+  // Fetch Learned Words from Notebook
+  const fetchSavedWords = async () => {
+    setDictSavedWordsLoading(true);
+    try {
+      const res = await apiRequest('/dictionary/words');
+      if (res.data) setDictSavedWords(res.data);
+    } catch (err) {
+      console.warn('Failed to load saved vocabulary:', err.message);
+    } finally {
+      setDictSavedWordsLoading(false);
+    }
+  };
+
+  // Save Current Word to Vocabulary Notebook
+  const handleSaveWordToNotebook = async (status = 'learning', userNote = '') => {
+    if (!dictResult || !dictResult.word) return;
+    try {
+      const payload = {
+        word: dictResult.word,
+        phonetic: dictResult.phonetic || dictResult.dictionary?.pronunciation?.written || '',
+        partOfSpeech: dictResult.partOfSpeech || (dictResult.dictionary?.partsOfSpeech || [])[0] || '',
+        shortDefinition: dictResult.shortDefinition || dictResult.dictionary?.definitions?.[0]?.text || '',
+        fullDefinition: dictResult.fullDefinition || '',
+        synonyms: dictResult.thesaurus?.synonyms || dictResult.synonyms || [],
+        antonyms: dictResult.thesaurus?.antonyms || dictResult.antonyms || [],
+        relatedWords: dictResult.thesaurus?.relatedWords || [],
+        examples: dictResult.examples || dictResult.dictionary?.examples || [],
+        etymology: dictResult.dictionary?.etymology || '',
+        audioUrl: dictResult.dictionary?.audio?.[0]?.url || '',
+        masteryStatus: status,
+        personalNotes: userNote
+      };
+
+      const res = await apiRequest('/dictionary/save', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      if (res.data) {
+        setDictResult(prev => ({
+          ...prev,
+          isSaved: true,
+          savedWordId: res.data._id,
+          masteryStatus: status,
+          personalNotes: userNote
+        }));
+        addToast(`"${dictResult.word}" saved to your Notebook (${status})`, 'success');
+        fetchSavedWords();
+      }
+    } catch (err) {
+      addToast(err.message || 'Failed to save word', 'error');
+    }
+  };
+
+  // Update Mastery Status for a saved word
+  const handleUpdateWordMastery = async (wordId, status, personalNotes) => {
+    try {
+      await apiRequest(`/dictionary/words/${wordId}/mastery`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, personalNotes })
+      });
+      addToast(`Status updated to ${status}`, 'success');
+      if (dictResult && dictResult.savedWordId === wordId) {
+        setDictResult(prev => ({ ...prev, masteryStatus: status, personalNotes: personalNotes !== undefined ? personalNotes : prev.personalNotes }));
+      }
+      fetchSavedWords();
+    } catch (err) {
+      addToast(err.message || 'Failed to update status', 'error');
+    }
+  };
+
+  // Delete Word from Notebook
+  const handleDeleteSavedWord = async (wordId) => {
+    try {
+      await apiRequest(`/dictionary/words/${wordId}`, { method: 'DELETE' });
+      addToast('Word removed from notebook', 'info');
+      if (dictResult && dictResult.savedWordId === wordId) {
+        setDictResult(prev => ({ ...prev, isSaved: false, savedWordId: null }));
+      }
+      fetchSavedWords();
+    } catch (err) {
+      addToast(err.message || 'Failed to remove word', 'error');
+    }
+  };
+
+  // Call Gemini Learning Assistant for auxiliary educational guidance
+  const handleCallAiAssistant = async (feature) => {
+    if (!dictResult || !dictResult.word) return;
+    setDictAiAssistantLoading(true);
+    setDictAiActiveFeature(feature);
+    try {
+      const res = await apiRequest('/dictionary/ai-assistant', {
+        method: 'POST',
+        body: JSON.stringify({
+          word: dictResult.word,
+          feature,
+          definition: dictResult.dictionary?.definitions?.[0]?.text || dictResult.shortDefinition
+        })
+      });
+      if (res.data) {
+        setDictAiAssistantData(res.data);
+      }
+    } catch (err) {
+      addToast('AI Assistant: ' + err.message, 'error');
+    } finally {
+      setDictAiAssistantLoading(false);
     }
   };
 
@@ -666,12 +790,22 @@ function App() {
             <DictionarySubscreen
               dictWord={dictWord}
               setDictWord={setDictWord}
-              dictMode={dictMode}
-              setDictMode={setDictMode}
               dictResult={dictResult}
               dictLoading={dictLoading}
               onLookup={handleLookupWord}
               onBack={() => setActiveSubscreen(null)}
+              dictActiveTab={dictActiveTab}
+              setDictActiveTab={setDictActiveTab}
+              dictSavedWords={dictSavedWords}
+              dictSavedWordsLoading={dictSavedWordsLoading}
+              onSaveWord={handleSaveWordToNotebook}
+              onUpdateMastery={handleUpdateWordMastery}
+              onDeleteWord={handleDeleteSavedWord}
+              onFetchSavedWords={fetchSavedWords}
+              dictAiAssistantData={dictAiAssistantData}
+              dictAiAssistantLoading={dictAiAssistantLoading}
+              dictAiActiveFeature={dictAiActiveFeature}
+              onCallAiAssistant={handleCallAiAssistant}
               geminiTestResult={geminiTestResult}
               geminiTesting={geminiTesting}
               onTestGemini={handleTestGemini}
@@ -1893,149 +2027,723 @@ function MoreView({ user, onNavigateToDictionary, onNavigateToNotes, onNavigateT
 }
 
 // -------------------------------------------------------------
-// Subscreen: Dictionary & AI Lexicon (matching DictionaryScreen.kt)
+// Subscreen: Dictionary & Academic Lexicon (Merriam-Webster + Gemini AI)
 // -------------------------------------------------------------
-function DictionarySubscreen({ dictWord, setDictWord, dictMode, setDictMode, dictResult, dictLoading, onLookup, onBack, geminiTestResult, geminiTesting, onTestGemini }) {
-  return (
-    <div className="p-5 space-y-4">
-      <div className="flex items-center gap-2">
-        <button onClick={onBack} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
-          <Icon name="arrow-left" className="w-5 h-5 text-[#0F6D54]" />
-        </button>
-        <div>
-          <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">AI Smart Dictionary</h2>
-          <p className="text-xs text-[#404944] dark:text-[#C0C9C3]">Gemini-powered vocabulary & deep explanations</p>
-        </div>
-      </div>
+function DictionarySubscreen({
+  dictWord,
+  setDictWord,
+  dictResult,
+  dictLoading,
+  onLookup,
+  onBack,
+  dictActiveTab,
+  setDictActiveTab,
+  dictSavedWords,
+  dictSavedWordsLoading,
+  onSaveWord,
+  onUpdateMastery,
+  onDeleteWord,
+  onFetchSavedWords,
+  dictAiAssistantData,
+  dictAiAssistantLoading,
+  dictAiActiveFeature,
+  onCallAiAssistant,
+  geminiTestResult,
+  geminiTesting,
+  onTestGemini
+}) {
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [selectedMastery, setSelectedMastery] = useState('learning');
+  const [personalNoteText, setPersonalNoteText] = useState('');
+  const [notebookFilter, setNotebookFilter] = useState('all');
+  const [notebookSearch, setNotebookSearch] = useState('');
+  const [playingAudio, setPlayingAudio] = useState(false);
 
-      {/* Search Input */}
-      <form onSubmit={onLookup} className="space-y-2">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Enter any English word or phrase..."
-            value={dictWord}
-            onChange={e => setDictWord(e.target.value)}
-            className="w-full pl-9 pr-16 py-3 rounded-2xl border border-[#DCE5DF] dark:border-[#404944] bg-white dark:bg-[#191D1B] text-sm font-semibold"
-          />
-          <Icon name="search" className="w-4 h-4 text-gray-400 absolute left-3 top-3.5" />
+  // Suggested academic words from prompt
+  const academicPills = ['mitigate', 'ephemeral', 'ubiquitous', 'exacerbate', 'paradigm'];
+
+  // Audio player helper
+  const playAudio = (url, fallbackText) => {
+    if (url) {
+      setPlayingAudio(true);
+      const audio = new Audio(url);
+      audio.play().catch(e => {
+        console.warn('Audio play error, falling back to speech synthesis:', e);
+        if ('speechSynthesis' in window) {
+          const utt = new SpeechSynthesisUtterance(fallbackText || dictResult?.word);
+          window.speechSynthesis.speak(utt);
+        }
+      }).finally(() => {
+        setTimeout(() => setPlayingAudio(false), 1200);
+      });
+    } else if ('speechSynthesis' in window && (fallbackText || dictResult?.word)) {
+      const utt = new SpeechSynthesisUtterance(fallbackText || dictResult?.word);
+      window.speechSynthesis.speak(utt);
+    }
+  };
+
+  // Load saved words whenever notebook tab is clicked
+  useEffect(() => {
+    if (dictActiveTab === 'notebook' && onFetchSavedWords) {
+      onFetchSavedWords();
+    }
+  }, [dictActiveTab]);
+
+  const filteredSavedWords = useMemo(() => {
+    return (dictSavedWords || []).filter(w => {
+      if (notebookFilter !== 'all' && w.masteryStatus !== notebookFilter) return false;
+      if (notebookSearch.trim()) {
+        const q = notebookSearch.toLowerCase();
+        return (w.word || '').toLowerCase().includes(q) ||
+               (w.shortDefinition || '').toLowerCase().includes(q) ||
+               (w.personalNotes || '').toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [dictSavedWords, notebookFilter, notebookSearch]);
+
+  return (
+    <div className="p-4 sm:p-5 space-y-4 max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+            <Icon name="arrow-left" className="w-5 h-5 text-[#0F6D54] dark:text-[#8AD5BB]" />
+          </button>
+          <div>
+            <h2 className="text-xl font-bold text-[#191C1B] dark:text-[#E1E3DF] tracking-tight">
+              Collegiate Lexicon & AI
+            </h2>
+            <p className="text-xs text-[#404944] dark:text-[#C0C9C3]">
+              Merriam-Webster® Collegiate Dictionary & Thesaurus
+            </p>
+          </div>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex bg-gray-100 dark:bg-[#191D1B] p-1 rounded-2xl border border-[#DCE5DF] dark:border-[#404944]">
           <button
-            type="submit"
-            disabled={dictLoading}
-            className="absolute right-2 top-2 px-3 py-1.5 rounded-xl bg-[#0F6D54] text-white font-bold text-xs"
+            onClick={() => setDictActiveTab('search')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              dictActiveTab === 'search'
+                ? 'bg-[#0F6D54] text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
           >
-            {dictLoading ? '...' : 'Explain'}
+            <Icon name="search" className="w-3.5 h-3.5" />
+            <span>Search</span>
+          </button>
+          <button
+            onClick={() => setDictActiveTab('notebook')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              dictActiveTab === 'notebook'
+                ? 'bg-[#0F6D54] text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <Icon name="bookmark" className="w-3.5 h-3.5" />
+            <span>Notebook</span>
+            {dictSavedWords?.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#A6F2D6] text-[#002117] font-extrabold">
+                {dictSavedWords.length}
+              </span>
+            )}
           </button>
         </div>
-
-        {/* Mode Selector */}
-        <div className="flex gap-1 overflow-x-auto no-scrollbar">
-          {[
-            { id: 'meaning', label: 'Definition & Nuance' },
-            { id: 'urdu', label: 'Urdu Context' },
-            { id: 'eli5', label: 'Simple Analogy' },
-            { id: 'business', label: 'Professional' }
-          ].map(m => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setDictMode(m.id)}
-              className={`px-3 py-1 rounded-xl text-[11px] font-semibold border shrink-0 transition ${
-                dictMode === m.id
-                  ? 'bg-[#A6F2D6] dark:bg-[#00513E] text-[#002117] dark:text-[#A6F2D6] border-transparent font-bold'
-                  : 'bg-white dark:bg-[#191D1B] text-gray-500 border-gray-200 dark:border-gray-800'
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-      </form>
-
-      {/* Gemini Live Test Quick Box */}
-      <div className="bg-[#EBF7F2] dark:bg-[#082B21] rounded-2xl p-3.5 border border-[#A6F2D6] dark:border-[#0F6D54] flex items-center justify-between">
-        <div>
-          <div className="text-xs font-bold text-[#002117] dark:text-[#A6F2D6] flex items-center gap-1.5">
-            <Icon name="sparkles" className="w-3.5 h-3.5 text-[#0F6D54]" />
-            <span>Gemini AI Engine</span>
-          </div>
-          <div className="text-[10px] text-[#002117]/80 dark:text-[#A6F2D6]/80 mt-0.5">
-            Test real-time AI generation status
-          </div>
-        </div>
-        <button
-          onClick={onTestGemini}
-          disabled={geminiTesting}
-          className="px-3 py-1.5 rounded-xl bg-[#0F6D54] text-white text-xs font-bold shadow-sm"
-        >
-          {geminiTesting ? 'Pinging...' : 'Test API'}
-        </button>
       </div>
 
-      {geminiTestResult && (
-        <div className="p-3 rounded-2xl bg-white dark:bg-[#191D1B] border border-[#DCE5DF] text-xs">
-          <span className="font-bold text-[#0F6D54]">API Test Response: </span>
-          <span>{geminiTestResult.reply || geminiTestResult.message}</span>
+      {dictActiveTab === 'search' ? (
+        <div className="space-y-4">
+          {/* Search Form */}
+          <form onSubmit={onLookup} className="space-y-2.5">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search Collegiate Dictionary (e.g., mitigate, paradigm)..."
+                value={dictWord}
+                onChange={e => setDictWord(e.target.value)}
+                className="w-full pl-10 pr-24 py-3.5 rounded-2xl border border-[#DCE5DF] dark:border-[#404944] bg-white dark:bg-[#191D1B] text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-[#0F6D54]"
+              />
+              <Icon name="search" className="w-4 h-4 text-gray-400 absolute left-3.5 top-4" />
+              {dictWord && (
+                <button
+                  type="button"
+                  onClick={() => setDictWord('')}
+                  className="absolute right-20 top-3.5 text-gray-400 hover:text-gray-600 p-1"
+                >
+                  <Icon name="x" className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={dictLoading}
+                className="absolute right-2 top-2 px-4 py-2 rounded-xl bg-[#0F6D54] hover:bg-[#0b5340] text-white font-bold text-xs shadow transition flex items-center gap-1"
+              >
+                {dictLoading ? (
+                  <>
+                    <span className="animate-spin text-xs">⟳</span>
+                    <span>Looking...</span>
+                  </>
+                ) : (
+                  <span>Lookup</span>
+                )}
+              </button>
+            </div>
+
+            {/* Academic Word Recommendations */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider shrink-0 mr-1">
+                Explore:
+              </span>
+              {academicPills.map(pw => (
+                <button
+                  key={pw}
+                  type="button"
+                  onClick={() => {
+                    setDictWord(pw);
+                    onLookup(null, pw);
+                  }}
+                  className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-white dark:bg-[#191D1B] text-[#0F6D54] dark:text-[#8AD5BB] border border-[#DCE5DF] dark:border-[#404944] hover:bg-[#EBF7F2] dark:hover:bg-[#082B21] shrink-0 transition"
+                >
+                  {pw}
+                </button>
+              ))}
+            </div>
+          </form>
+
+          {/* Invalid Word or Suggestions View */}
+          {dictResult && !dictResult.success && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 space-y-2">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
+                <Icon name="alert-triangle" className="w-4 h-4 text-amber-600" />
+                <span>Word Not Found</span>
+              </div>
+              <p className="text-xs text-amber-900 dark:text-amber-200">
+                {dictResult.message || 'We could not find an entry for that exact spelling.'}
+              </p>
+              {dictResult.suggestions && dictResult.suggestions.length > 0 && (
+                <div className="pt-2">
+                  <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 uppercase">
+                    Did you mean:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {dictResult.suggestions.map(sug => (
+                      <button
+                        key={sug}
+                        type="button"
+                        onClick={() => {
+                          setDictWord(sug);
+                          onLookup(null, sug);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#191D1B] border border-amber-300 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                      >
+                        {sug}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Word Result Card */}
+          {dictResult && dictResult.success && (
+            <div className="space-y-4">
+              {/* Main Card */}
+              <div className="bg-white dark:bg-[#191D1B] rounded-3xl p-5 sm:p-6 border border-[#DCE5DF] dark:border-[#404944] shadow-sm space-y-5">
+                {/* Header & Pronunciation */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
+                  <div>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h1 className="text-3xl font-extrabold text-[#0F6D54] dark:text-[#8AD5BB] tracking-tight font-serif">
+                        {dictResult.dictionary?.syllables || dictResult.word}
+                      </h1>
+                      {dictResult.partOfSpeech && (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#EBF7F2] dark:bg-[#082B21] text-[#0F6D54] dark:text-[#8AD5BB] border border-[#A6F2D6] dark:border-[#0F6D54]">
+                          {dictResult.partOfSpeech}
+                        </span>
+                      )}
+                    </div>
+                    {/* Phonetic & IPA */}
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 font-mono mt-1">
+                      {dictResult.dictionary?.pronunciation?.written && (
+                        <span>\{dictResult.dictionary.pronunciation.written}\</span>
+                      )}
+                      {dictResult.dictionary?.pronunciation?.ipa && (
+                        <span className="text-gray-400">({dictResult.dictionary.pronunciation.ipa})</span>
+                      )}
+                      {dictResult.phonetic && !dictResult.dictionary?.pronunciation?.written && (
+                        <span>{dictResult.phonetic}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions: Audio & Save */}
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    <button
+                      onClick={() => playAudio(dictResult.dictionary?.audio?.[0]?.url, dictResult.word)}
+                      className={`px-3 py-2 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition ${
+                        playingAudio
+                          ? 'bg-[#A6F2D6] text-[#002117] border-transparent'
+                          : 'bg-gray-50 dark:bg-gray-800 text-[#0F6D54] dark:text-[#8AD5BB] border-gray-200 dark:border-gray-700 hover:bg-gray-100'
+                      }`}
+                      title="Listen to American English pronunciation"
+                    >
+                      <Icon name="volume-2" className="w-4 h-4" />
+                      <span>{playingAudio ? 'Playing...' : 'Audio'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setSelectedMastery(dictResult.masteryStatus || 'learning');
+                        setPersonalNoteText(dictResult.personalNotes || '');
+                        setSaveModalOpen(true);
+                      }}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+                        dictResult.isSaved
+                          ? 'bg-[#A6F2D6] dark:bg-[#00513E] text-[#002117] dark:text-[#A6F2D6]'
+                          : 'bg-[#0F6D54] text-white hover:bg-[#0b5340]'
+                      }`}
+                    >
+                      <Icon name={dictResult.isSaved ? "bookmark-check" : "bookmark"} className="w-4 h-4" />
+                      <span>{dictResult.isSaved ? 'Saved in Notebook' : 'Save Word'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Merriam-Webster Attribution Badge */}
+                <div className="flex items-center justify-between text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-gray-600 dark:text-gray-300">
+                      Merriam-Webster Collegiate®
+                    </span>
+                    <span>• Authoritative Reference</span>
+                  </div>
+                  {dictResult.source?.cached && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-500">
+                      Cached
+                    </span>
+                  )}
+                </div>
+
+                {/* DEFINITIONS SECTION */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Icon name="book-open" className="w-3.5 h-3.5 text-[#0F6D54]" />
+                    <span>Definitions</span>
+                  </div>
+                  <div className="space-y-3 pl-1">
+                    {(dictResult.dictionary?.definitions || [
+                      { text: dictResult.shortDefinition || dictResult.fullDefinition, examples: dictResult.examples }
+                    ]).map((def, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="text-sm font-medium text-[#191C1B] dark:text-[#E1E3DF] leading-relaxed flex items-start gap-2">
+                          <span className="text-[#0F6D54] font-bold shrink-0">{idx + 1}.</span>
+                          <div>
+                            {def.partOfSpeech && (
+                              <span className="text-xs italic text-gray-500 dark:text-gray-400 mr-1.5">
+                                [{def.partOfSpeech}]
+                              </span>
+                            )}
+                            <span>{def.text}</span>
+                          </div>
+                        </div>
+
+                        {/* Verbal Illustrations / Examples */}
+                        {def.examples && def.examples.length > 0 && (
+                          <div className="pl-6 space-y-1">
+                            {def.examples.map((ex, eIdx) => (
+                              <div key={eIdx} className="text-xs italic text-gray-600 dark:text-gray-400 flex items-start gap-1">
+                                <span className="text-gray-400 select-none">“</span>
+                                <span>{ex}</span>
+                                <span className="text-gray-400 select-none">”</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SYNONYMS (Merriam-Webster Collegiate Thesaurus) */}
+                {((dictResult.thesaurus?.synonyms && dictResult.thesaurus.synonyms.length > 0) ||
+                  (dictResult.synonyms && dictResult.synonyms.length > 0)) && (
+                  <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Icon name="check-circle" className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Synonyms</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(dictResult.thesaurus?.synonyms || dictResult.synonyms || []).map((syn, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setDictWord(syn);
+                            onLookup(null, syn);
+                          }}
+                          className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition flex items-center gap-1"
+                          title={`Look up "${syn}"`}
+                        >
+                          <span>{syn}</span>
+                          <span className="text-emerald-400 text-[10px]">↗</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ANTONYMS */}
+                {((dictResult.thesaurus?.antonyms && dictResult.thesaurus.antonyms.length > 0) ||
+                  (dictResult.antonyms && dictResult.antonyms.length > 0)) && (
+                  <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Icon name="x-circle" className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Antonyms</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(dictResult.thesaurus?.antonyms || dictResult.antonyms || []).map((ant, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setDictWord(ant);
+                            onLookup(null, ant);
+                          }}
+                          className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 transition flex items-center gap-1"
+                          title={`Look up "${ant}"`}
+                        >
+                          <span>{ant}</span>
+                          <span className="text-rose-400 text-[10px]">↗</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* RELATED WORDS */}
+                {dictResult.thesaurus?.relatedWords && dictResult.thesaurus.relatedWords.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Icon name="share-2" className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Related Words</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {dictResult.thesaurus.relatedWords.map((rw, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setDictWord(rw);
+                            onLookup(null, rw);
+                          }}
+                          className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition"
+                        >
+                          {rw}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ETYMOLOGY */}
+                {dictResult.dictionary?.etymology && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 space-y-1">
+                    <div className="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                      <Icon name="compass" className="w-3.5 h-3.5" />
+                      <span>Etymology & Origin</span>
+                    </div>
+                    <p className="text-xs text-amber-900 dark:text-amber-200 font-serif leading-relaxed">
+                      {dictResult.dictionary.etymology}
+                    </p>
+                  </div>
+                )}
+
+                {/* IDIOMS & PHRASES */}
+                {dictResult.dictionary?.idioms && dictResult.dictionary.idioms.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      Phrases & Run-on Idioms
+                    </div>
+                    <div className="space-y-1.5">
+                      {dictResult.dictionary.idioms.map((idm, idx) => (
+                        <div key={idx} className="text-xs text-gray-700 dark:text-gray-300">
+                          <span className="font-bold text-[#0F6D54]">{idm.phrase}:</span> {idm.definition}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* AI LEARNING ASSISTANT (Gemini Integration) */}
+              <div className="bg-gradient-to-br from-[#F4FAF7] to-white dark:from-[#09231B] dark:to-[#191D1B] rounded-3xl p-5 border border-[#A6F2D6] dark:border-[#0F6D54] space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-xl bg-[#0F6D54] text-white">
+                      <Icon name="sparkles" className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#002117] dark:text-[#A6F2D6]">
+                        Gemini AI Learning Companion
+                      </h3>
+                      <p className="text-[11px] text-[#404944] dark:text-[#C0C9C3]">
+                        Educational aids for academic research, textbooks & reading
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={onTestGemini}
+                    disabled={geminiTesting}
+                    className="text-[11px] font-bold text-[#0F6D54] dark:text-[#8AD5BB] hover:underline"
+                  >
+                    {geminiTesting ? 'Testing...' : 'Test AI Key'}
+                  </button>
+                </div>
+
+                {/* AI Feature Selector Pills */}
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { id: 'simple_explanation', label: 'Simple English', icon: 'smile' },
+                    { id: 'urdu_explanation', label: 'Urdu Context (اردو)', icon: 'globe' },
+                    { id: 'academic_context', label: 'Academic Usage', icon: 'file-text' },
+                    { id: 'collocations', label: 'Collocations', icon: 'link' },
+                    { id: 'common_mistakes', label: 'Common Mistakes', icon: 'alert-circle' },
+                    { id: 'memory_tricks', label: 'Memory Trick', icon: 'zap' },
+                    { id: 'quiz', label: 'Quiz Me', icon: 'help-circle' }
+                  ].map(feat => (
+                    <button
+                      key={feat.id}
+                      type="button"
+                      disabled={dictAiAssistantLoading}
+                      onClick={() => onCallAiAssistant(feat.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 ${
+                        dictAiActiveFeature === feat.id
+                          ? 'bg-[#0F6D54] text-white border-[#0F6D54] shadow-sm'
+                          : 'bg-white dark:bg-[#191D1B] text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-[#0F6D54]'
+                      }`}
+                    >
+                      <Icon name={feat.icon} className="w-3.5 h-3.5" />
+                      <span>{feat.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* AI Result Presentation */}
+                {dictAiAssistantLoading && (
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#191D1B] border border-gray-200 dark:border-gray-800 text-center space-y-2">
+                    <span className="inline-block animate-spin text-lg text-[#0F6D54]">⟳</span>
+                    <p className="text-xs text-gray-500 font-medium">
+                      Gemini is generating educational insights for "{dictResult.word}"...
+                    </p>
+                  </div>
+                )}
+
+                {dictAiAssistantData && !dictAiAssistantLoading && (
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#191D1B] border border-[#A6F2D6] dark:border-[#0F6D54] space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-[#0F6D54] dark:text-[#8AD5BB] uppercase">
+                      <span>{dictAiAssistantData.feature.replace('_', ' ')}:</span>
+                      {dictAiAssistantData.isFallback && (
+                        <span className="text-[10px] text-gray-400 lowercase">(curated guide)</span>
+                      )}
+                    </div>
+                    <div className="text-gray-800 dark:text-gray-200 whitespace-pre-line leading-relaxed font-sans">
+                      {dictAiAssistantData.content}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* VOCABULARY NOTEBOOK TAB */
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+            {/* Search saved words */}
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search saved vocabulary or notes..."
+                value={notebookSearch}
+                onChange={e => setNotebookSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 rounded-2xl border border-[#DCE5DF] dark:border-[#404944] bg-white dark:bg-[#191D1B] text-xs font-semibold"
+              />
+              <Icon name="search" className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3.5" />
+            </div>
+
+            {/* Filter pills */}
+            <div className="flex gap-1 overflow-x-auto no-scrollbar">
+              {['all', 'learning', 'reviewing', 'mastered'].map(st => (
+                <button
+                  key={st}
+                  onClick={() => setNotebookFilter(st)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition shrink-0 ${
+                    notebookFilter === st
+                      ? 'bg-[#0F6D54] text-white shadow-sm'
+                      : 'bg-white dark:bg-[#191D1B] text-gray-500 border border-gray-200 dark:border-gray-800'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Words List */}
+          {dictSavedWordsLoading ? (
+            <div className="p-8 text-center text-xs text-gray-400">Loading your vocabulary notebook...</div>
+          ) : filteredSavedWords.length === 0 ? (
+            <div className="p-8 text-center bg-white dark:bg-[#191D1B] rounded-3xl border border-dashed border-gray-300 dark:border-gray-700 space-y-2">
+              <Icon name="bookmark" className="w-8 h-8 text-gray-300 mx-auto" />
+              <div className="text-sm font-bold text-gray-600 dark:text-gray-300">No words found</div>
+              <p className="text-xs text-gray-400 max-w-xs mx-auto">
+                Look up words in the search tab and click "Save Word" to curate your vocabulary notebook.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredSavedWords.map(w => (
+                <div
+                  key={w._id}
+                  className="p-4 rounded-3xl bg-white dark:bg-[#191D1B] border border-[#DCE5DF] dark:border-[#404944] shadow-sm space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setDictActiveTab('search');
+                          setDictWord(w.word);
+                          onLookup(null, w.word);
+                        }}
+                        className="text-lg font-bold text-[#0F6D54] dark:text-[#8AD5BB] font-serif hover:underline text-left"
+                      >
+                        {w.word}
+                      </button>
+                      <span className="text-xs text-gray-400">{w.phonetic}</span>
+                      {w.partOfSpeech && (
+                        <span className="text-[10px] uppercase font-bold text-gray-500 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800">
+                          {w.partOfSpeech}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Mastery selector */}
+                      <select
+                        value={w.masteryStatus || 'learning'}
+                        onChange={e => onUpdateMastery(w._id, e.target.value, w.personalNotes)}
+                        className="px-2 py-1 rounded-xl text-[11px] font-bold border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-[#0F6D54] dark:text-[#8AD5BB]"
+                      >
+                        <option value="learning">Learning</option>
+                        <option value="reviewing">Reviewing</option>
+                        <option value="mastered">Mastered</option>
+                      </select>
+
+                      <button
+                        onClick={() => onDeleteWord(w._id)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 transition"
+                        title="Remove word"
+                      >
+                        <Icon name="trash-2" className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-700 dark:text-gray-300 line-clamp-2">
+                    {w.shortDefinition || w.fullDefinition}
+                  </p>
+
+                  {/* Personal Note */}
+                  {w.personalNotes && (
+                    <div className="p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300">
+                      <span className="font-bold text-[#0F6D54]">My Note: </span>
+                      <span>{w.personalNotes}</span>
+                    </div>
+                  )}
+
+                  {/* Synonyms preview */}
+                  {w.synonyms && w.synonyms.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {w.synonyms.slice(0, 4).map((s, sIdx) => (
+                        <span key={sIdx} className="px-2 py-0.5 rounded-lg text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Word Result Card */}
-      {dictResult && (
-        <div className="bg-white dark:bg-[#191D1B] rounded-3xl p-5 border border-[#DCE5DF] dark:border-[#404944] shadow-md space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-2xl font-bold text-[#0F6D54] dark:text-[#8AD5BB]">{dictResult.word}</div>
-              <div className="text-xs text-gray-400 font-mono mt-0.5">
-                {dictResult.phonetic} • {dictResult.partOfSpeech}
-              </div>
+      {/* Save Word Modal */}
+      {saveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#191D1B] rounded-3xl p-6 border border-[#DCE5DF] dark:border-[#404944] max-w-sm w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-[#191C1B] dark:text-[#E1E3DF]">
+                Save "{dictResult?.word}"
+              </h3>
+              <button onClick={() => setSaveModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                <Icon name="x" className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={() => {
-                if ('speechSynthesis' in window) {
-                  const utterance = new SpeechSynthesisUtterance(dictResult.word);
-                  window.speechSynthesis.speak(utterance);
-                }
-              }}
-              className="p-2.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[#0F6D54]"
-              title="Pronounce"
-            >
-              <Icon name="volume-2" className="w-4 h-4" />
-            </button>
-          </div>
 
-          <div>
-            <div className="text-[11px] uppercase font-bold text-gray-400 mb-1">Definition</div>
-            <div className="text-xs text-[#191C1B] dark:text-[#E1E3DF] leading-relaxed">
-              {dictResult.shortDefinition || dictResult.fullDefinition}
-            </div>
-          </div>
-
-          {dictResult.eli5Analogy && (
-            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50">
-              <div className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase mb-0.5">Analogy (ELI5)</div>
-              <div className="text-xs text-amber-900 dark:text-amber-200">{dictResult.eli5Analogy}</div>
-            </div>
-          )}
-
-          {dictResult.examples && dictResult.examples.length > 0 && (
-            <div>
-              <div className="text-[11px] uppercase font-bold text-gray-400 mb-1">Example</div>
-              <div className="text-xs italic text-gray-600 dark:text-gray-300">"{dictResult.examples[0]}"</div>
-            </div>
-          )}
-
-          {dictResult.synonyms && dictResult.synonyms.length > 0 && (
-            <div>
-              <div className="text-[11px] uppercase font-bold text-gray-400 mb-1">Synonyms</div>
-              <div className="flex flex-wrap gap-1.5">
-                {dictResult.synonyms.map(s => (
-                  <span key={s} className="px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-[11px] text-gray-600 dark:text-gray-300">
-                    {s}
-                  </span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase">Mastery Stage</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['learning', 'reviewing', 'mastered'].map(st => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setSelectedMastery(st)}
+                    className={`py-2 rounded-xl text-xs font-bold capitalize transition border ${
+                      selectedMastery === st
+                        ? 'bg-[#0F6D54] text-white border-[#0F6D54]'
+                        : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600'
+                    }`}
+                  >
+                    {st}
+                  </button>
                 ))}
               </div>
             </div>
-          )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500 uppercase">Personal Note (Optional)</label>
+              <textarea
+                rows={3}
+                placeholder="Where did you read this? Personal memory trigger or context sentence..."
+                value={personalNoteText}
+                onChange={e => setPersonalNoteText(e.target.value)}
+                className="w-full p-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs focus:outline-none focus:ring-1 focus:ring-[#0F6D54]"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSaveModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onSaveWord(selectedMastery, personalNoteText);
+                  setSaveModalOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-[#0F6D54] hover:bg-[#0b5340] text-white text-xs font-bold shadow transition"
+              >
+                Confirm Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

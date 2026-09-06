@@ -1,5 +1,7 @@
 package com.example.data.api
 
+import com.example.data.model.AiAssistantRequest
+import com.example.data.model.AiAssistantResponse
 import com.example.data.model.LookupWordRequest
 import com.example.data.model.SaveWordRequest
 import com.example.data.model.UpdateMasteryRequest
@@ -18,10 +20,20 @@ import retrofit2.http.Query
 
 interface DictionaryApiService {
 
+    @GET("api/dictionary/{word}")
+    suspend fun getWordByParam(
+        @Path("word") word: String
+    ): Response<WordLookupResponse>
+
     @POST("api/dictionary/lookup")
     suspend fun lookupWord(
         @Body request: LookupWordRequest
     ): Response<WordLookupResponse>
+
+    @POST("api/dictionary/ai-assistant")
+    suspend fun getAiAssistant(
+        @Body request: AiAssistantRequest
+    ): Response<AiAssistantResponse>
 
     @POST("api/dictionary/save")
     suspend fun saveWord(

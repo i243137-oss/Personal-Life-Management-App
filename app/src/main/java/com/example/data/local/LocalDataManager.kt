@@ -683,7 +683,10 @@ class LocalDataManager(context: Context) {
         eli5Analogy: String?,
         keyTakeaway: String?,
         masteryStatus: String = "learning",
-        personalNotes: String? = null
+        personalNotes: String? = null,
+        relatedWords: List<String> = emptyList(),
+        etymology: String? = null,
+        audioUrl: String? = null
     ): WordItemDto {
         val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
         val current = _wordsFlow.value.toMutableList()
@@ -699,7 +702,10 @@ class LocalDataManager(context: Context) {
                 fullDefinition = fullDefinition ?: existing.fullDefinition,
                 synonyms = if (synonyms.isNotEmpty()) synonyms else existing.synonyms,
                 antonyms = if (antonyms.isNotEmpty()) antonyms else existing.antonyms,
+                relatedWords = if (relatedWords.isNotEmpty()) relatedWords else existing.relatedWords,
                 examples = if (examples.isNotEmpty()) examples else existing.examples,
+                etymology = etymology ?: existing.etymology,
+                audioUrl = audioUrl ?: existing.audioUrl,
                 keyPoints = if (keyPoints.isNotEmpty()) keyPoints else existing.keyPoints,
                 eli5Analogy = eli5Analogy ?: existing.eli5Analogy,
                 keyTakeaway = keyTakeaway ?: existing.keyTakeaway,
@@ -719,7 +725,10 @@ class LocalDataManager(context: Context) {
                 fullDefinition = fullDefinition,
                 synonyms = synonyms,
                 antonyms = antonyms,
+                relatedWords = relatedWords,
                 examples = examples,
+                etymology = etymology,
+                audioUrl = audioUrl,
                 keyPoints = keyPoints,
                 eli5Analogy = eli5Analogy,
                 keyTakeaway = keyTakeaway,

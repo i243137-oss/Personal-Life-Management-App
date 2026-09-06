@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -7,6 +8,37 @@ plugins {
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
+}
+
+fun resolveSecret(key: String): String {
+  val env = System.getenv(key)
+  if (!env.isNullOrBlank()) return env
+
+  val envFile = rootProject.file(".env")
+  if (envFile.exists()) {
+    try {
+      val props = Properties()
+      envFile.inputStream().use { stream ->
+        props.load(stream)
+      }
+      val v = props.getProperty(key)
+      if (!v.isNullOrBlank()) return v
+    } catch (_: Exception) {}
+  }
+
+  val exampleFile = rootProject.file(".env.example")
+  if (exampleFile.exists()) {
+    try {
+      val props = Properties()
+      exampleFile.inputStream().use { stream ->
+        props.load(stream)
+      }
+      val v = props.getProperty(key)
+      if (!v.isNullOrBlank() && !v.startsWith("your_")) return v
+    } catch (_: Exception) {}
+  }
+
+  return ""
 }
 
 android {
@@ -21,6 +53,11 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    val mwDictKey = resolveSecret("MW_DICTIONARY_API_KEY")
+    val mwThesKey = resolveSecret("MW_THESAURUS_API_KEY")
+    buildConfigField("String", "MW_DICTIONARY_API_KEY", "\"$mwDictKey\"")
+    buildConfigField("String", "MW_THESAURUS_API_KEY", "\"$mwThesKey\"")
   }
 
   signingConfigs {
@@ -71,6 +108,8 @@ secrets {
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
   ignoreList.add("JWT_SECRET")
   ignoreList.add("MONGODB_URI")
+  ignoreList.add("MW_DICTIONARY_API_KEY")
+  ignoreList.add("MW_THESAURUS_API_KEY")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }

@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.model.AiAssistantData
 import com.example.data.model.VocabularyStatsData
 import com.example.data.model.WordItemDto
 import com.example.data.model.WordLookupResult
@@ -23,6 +24,10 @@ data class DictionaryUiState(
     val lookupResult: WordLookupResult? = null,
     val lookupError: String? = null,
     val actionMessage: String? = null,
+    // AI Companion
+    val aiAssistantData: AiAssistantData? = null,
+    val isAiAssistantLoading: Boolean = false,
+    val activeAiFeature: String = "simple_explanation",
     // Notebook
     val filterStatus: String = "all", // "all", "learning", "reviewing", "mastered"
     val notebookSearch: String = "",
@@ -86,7 +91,8 @@ class DictionaryViewModel(
                 isLookingUp = true,
                 lookupError = null,
                 searchQuery = word,
-                activeMode = mode
+                activeMode = mode,
+                aiAssistantData = null
             )
         }
 
@@ -115,7 +121,24 @@ class DictionaryViewModel(
         }
     }
 
-    fun saveCurrentLookup(masteryStatus: String = "learning") {
+    fun getAiAssistant(feature: String) {
+        val word = _uiState.value.lookupResult?.word ?: return
+        val def = _uiState.value.lookupResult?.shortDefinition
+        _uiState.update { it.copy(isAiAssistantLoading = true, activeAiFeature = feature) }
+        viewModelScope.launch {
+            val res = dictionaryRepository.getAiAssistant(word, feature, def, null)
+            res.fold(
+                onSuccess = { data ->
+                    _uiState.update { it.copy(isAiAssistantLoading = false, aiAssistantData = data) }
+                },
+                onFailure = { err ->
+                    _uiState.update { it.copy(isAiAssistantLoading = false, actionMessage = "AI Assistant: ${err.message}") }
+                }
+            )
+        }
+    }
+
+    fun saveCurrentLookup(masteryStatus: String = "learning", notes: String? = null) {
         val result = _uiState.value.lookupResult ?: return
         viewModelScope.launch {
             val saveResult = dictionaryRepository.saveWord(
@@ -127,11 +150,15 @@ class DictionaryViewModel(
                 fullDefinition = result.fullDefinition,
                 synonyms = result.synonyms,
                 antonyms = result.antonyms,
+                relatedWords = result.relatedWords,
                 examples = result.examples,
+                etymology = result.etymology,
+                audioUrl = result.audioUrl,
                 keyPoints = result.keyPoints,
                 eli5Analogy = result.eli5Analogy,
                 keyTakeaway = result.keyTakeaway,
-                masteryStatus = masteryStatus
+                masteryStatus = masteryStatus,
+                personalNotes = notes ?: result.personalNotes
             )
             saveResult.fold(
                 onSuccess = { savedDto ->
@@ -140,7 +167,8 @@ class DictionaryViewModel(
                             lookupResult = result.copy(
                                 isSaved = true,
                                 savedWordId = savedDto.id,
-                                masteryStatus = savedDto.masteryStatus
+                                masteryStatus = savedDto.masteryStatus,
+                                personalNotes = savedDto.personalNotes
                             ),
                             actionMessage = "\"${result.word}\" saved to Vocabulary Notebook"
                         )
