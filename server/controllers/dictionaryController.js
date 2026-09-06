@@ -662,7 +662,11 @@ exports.testGemini = async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+    let msg = e.message || 'Error communicating with Gemini API';
+    if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+      msg = `${msg}\n\nTroubleshooting: Your Google Cloud / AI Studio project has been denied access or restricted. Please create a new Gemini API key in Google AI Studio (aistudio.google.com) under an active personal project, or ensure the Generative Language API is enabled without restrictive API key constraints.`;
+    }
+    res.status(500).json({ success: false, message: msg });
   }
 };
 
