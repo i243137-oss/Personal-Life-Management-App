@@ -152,16 +152,17 @@ function App() {
   }, [darkMode]);
 
   // Load Data
-  const refreshAllData = useCallback(async () => {
-    if (!token) return;
+  const refreshAllData = useCallback(async (tokenOverride = null) => {
+    const currentToken = tokenOverride || token || localStorage.getItem('plm_token');
+    if (!currentToken) return;
     setLoading(true);
     try {
       const [txRes, loansRes, notesRes, luggageRes, wordsRes] = await Promise.allSettled([
-        apiRequest('/transactions'),
-        apiRequest('/loans'),
-        apiRequest('/notes'),
-        apiRequest('/luggage'),
-        apiRequest('/dictionary/words'),
+        apiRequest('/transactions', { headers: { Authorization: `Bearer ${currentToken}` } }),
+        apiRequest('/loans', { headers: { Authorization: `Bearer ${currentToken}` } }),
+        apiRequest('/notes', { headers: { Authorization: `Bearer ${currentToken}` } }),
+        apiRequest('/luggage', { headers: { Authorization: `Bearer ${currentToken}` } }),
+        apiRequest('/dictionary/words', { headers: { Authorization: `Bearer ${currentToken}` } }),
       ]);
 
       if (txRes.status === 'fulfilled' && txRes.value.data) setTransactions(txRes.value.data);
@@ -182,7 +183,7 @@ function App() {
   }, [token, activeTripId]);
 
   useEffect(() => {
-    if (token) refreshAllData();
+    if (token) refreshAllData(token);
   }, [token, refreshAllData]);
 
   // Auth Handlers
@@ -192,11 +193,12 @@ function App() {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      setToken(res.token);
-      setUser(res.user);
       localStorage.setItem('plm_token', res.token);
       localStorage.setItem('plm_user', JSON.stringify(res.user));
+      setToken(res.token);
+      setUser(res.user);
       addToast(`Welcome back, ${res.user.name}!`, 'success');
+      refreshAllData(res.token);
     } catch (err) {
       addToast(err.message || 'Login failed', 'error');
     }
@@ -208,11 +210,12 @@ function App() {
         method: 'POST',
         body: JSON.stringify({ name, email, password }),
       });
-      setToken(res.token);
-      setUser(res.user);
       localStorage.setItem('plm_token', res.token);
       localStorage.setItem('plm_user', JSON.stringify(res.user));
+      setToken(res.token);
+      setUser(res.user);
       addToast(`Welcome to Personal Life Manager, ${res.user.name}!`, 'success');
+      refreshAllData(res.token);
     } catch (err) {
       addToast(err.message || 'Registration failed', 'error');
     }

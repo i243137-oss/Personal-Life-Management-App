@@ -30,6 +30,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +90,18 @@ fun AppNavigation(
     var activeSubscreen by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    // When the user logs in, immediately reload all user data across ViewModels
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) {
+            dashboardViewModel.loadDashboard()
+            moneyViewModel.loadData()
+            loanViewModel.loadData(isRefresh = true)
+            luggageViewModel.loadTrips(isRefresh = true)
+            noteViewModel.loadNotes()
+            dictionaryViewModel.refreshNotebookData()
+        }
+    }
 
     BackHandler(enabled = activeSubscreen != null) {
         activeSubscreen = null
