@@ -146,63 +146,75 @@ Return ONLY a valid JSON object with:
       prompt = `Provide a concise learning insight for the word "${word}" to help a student master its academic nuance.`;
   }
 
-  return new Promise((resolve, reject) => {
-    const postData = JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 600
-      }
-    });
+  const models = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
+  let lastError = null;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    const parsedUrl = new URL(url);
+  for (const model of models) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const postData = JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 600
+          }
+        });
 
-    const req = https.request({
-      hostname: parsedUrl.hostname,
-      path: parsedUrl.pathname + parsedUrl.search,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      },
-      timeout: 8000
-    }, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            const data = JSON.parse(body);
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              if (feature === 'quiz') {
-                const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                try {
-                  return resolve(JSON.parse(cleaned));
-                } catch (e) {
-                  return resolve({ text });
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const parsedUrl = new URL(url);
+
+        const req = https.request({
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.pathname + parsedUrl.search,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          },
+          timeout: 8000
+        }, (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('end', () => {
+            try {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                const data = JSON.parse(body);
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text) {
+                  if (feature === 'quiz') {
+                    const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    try {
+                      return resolve(JSON.parse(cleaned));
+                    } catch (e) {
+                      return resolve({ text });
+                    }
+                  }
+                  return resolve({ text: text.trim(), model });
                 }
               }
-              return resolve({ text: text.trim() });
+              reject(new Error(`Gemini API HTTP ${res.statusCode}: ${body}`));
+            } catch (e) {
+              reject(e);
             }
-          }
-          reject(new Error(`Gemini API HTTP ${res.statusCode}: ${body}`));
-        } catch (e) {
-          reject(e);
-        }
+          });
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error(`Gemini API request timed out`));
+        });
+
+        req.write(postData);
+        req.end();
       });
-    });
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
+  }
 
-    req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Gemini API request timed out'));
-    });
-
-    req.write(postData);
-    req.end();
-  });
+  throw lastError || new Error('All Gemini models failed');
 }
 
 /**
@@ -645,7 +657,7 @@ exports.testGemini = async (req, res) => {
     res.json({
       success: true,
       configured: true,
-      model: 'gemini-2.5-flash',
+      model: result.model || 'gemini-3.6-flash',
       reply: result.text,
       timestamp: new Date().toISOString()
     });

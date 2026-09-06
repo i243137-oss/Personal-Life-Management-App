@@ -1959,7 +1959,7 @@ function MoreView({ user, onNavigateToDictionary, onNavigateToNotes, onNavigateT
               <span className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Gemini Integration</span>
             </div>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#A6F2D6] text-[#002117]">
-              gemini-2.5-flash
+              gemini-3.6-flash
             </span>
           </div>
 
