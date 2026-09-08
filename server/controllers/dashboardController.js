@@ -92,7 +92,6 @@ const getDashboardSummary = async (req, res) => {
     const totalExpenses = monthlyExpenses;
 
     // Days elapsed calculation for expenses average
-    const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonthNum = now.getMonth() + 1; // 1-12
     const currentDayOfMonth = Math.max(1, now.getDate());
