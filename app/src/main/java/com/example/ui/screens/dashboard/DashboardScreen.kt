@@ -328,7 +328,7 @@ fun DashboardMetricsSection(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Cycle resets 1st of month · Historical data preserved",
+                                text = "Monthly Overview",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -432,7 +432,7 @@ fun DashboardMetricsSection(
 
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Real-time balance from MongoDB source of truth",
+                        text = "Available Balance",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFA2DFC7)
                     )
@@ -440,7 +440,42 @@ fun DashboardMetricsSection(
             }
         }
 
-        // Requirements 9 & 10: Monthly Income & Average Daily Income Card
+        // Monthly Financial Overview: Total Income, Total Expenses, and Daily Averages Comparison
+        val totalIncome = if (data.totalIncome > 0.0) data.totalIncome else data.monthlyIncome
+        val totalExpenses = if (data.totalExpenses > 0.0) data.totalExpenses else data.monthlyExpenses
+        val avgIncome = if (data.averageDailyIncome > 0.0) data.averageDailyIncome else totalIncome / 30.0
+        val avgExpense = if (data.averageDailyExpense > 0.0) data.averageDailyExpense else totalExpenses / 30.0
+
+        val isAbove = avgExpense > avgIncome
+        val isBelow = avgExpense < avgIncome
+        val diff = kotlin.math.abs(avgExpense - avgIncome)
+
+        val statusBgColor = when {
+            isAbove -> Color(0xFFFFF1F2)
+            isBelow -> Color(0xFFECFDF5)
+            else -> Color(0xFFEFF6FF)
+        }
+        val statusBorderColor = when {
+            isAbove -> Color(0xFFF87171)
+            isBelow -> Color(0xFF34D399)
+            else -> Color(0xFF60A5FA)
+        }
+        val statusAccentColor = when {
+            isAbove -> Color(0xFFDC2626)
+            isBelow -> Color(0xFF059669)
+            else -> Color(0xFF2563EB)
+        }
+        val statusTitle = when {
+            isAbove -> "EXPENSES EXCEED INCOME"
+            isBelow -> "WITHIN INCOME BUDGET"
+            else -> "BALANCED"
+        }
+        val statusIcon = when {
+            isAbove -> Icons.Default.Warning
+            isBelow -> Icons.Default.CheckCircle
+            else -> Icons.Default.CheckCircle
+        }
+
         ElevatedCard(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.elevatedCardColors(
@@ -458,7 +493,7 @@ fun DashboardMetricsSection(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Monthly Financial Breakdown",
+                        text = "Monthly Financial Overview",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -483,7 +518,7 @@ fun DashboardMetricsSection(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Column 1: Monthly Income
+                    // Column 1: Total Income
                     Card(
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(
@@ -501,254 +536,178 @@ fun DashboardMetricsSection(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Monthly Income",
+                                    text = "Total Income",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = formatCurrency(data.monthlyIncome),
+                                text = formatCurrency(totalIncome),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF059669)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Actual database transactions",
+                                text = "${formatCurrency(avgIncome)}/day avg",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                         }
                     }
 
-                    // Column 2: Average Daily Income (Monthly Income / 30)
+                    // Column 2: Total Expenses
                     Card(
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+                            containerColor = AccentExpense.copy(alpha = 0.08f)
                         ),
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Calculate,
+                                    imageVector = Icons.Default.TrendingDown,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = AccentExpense,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Avg Daily Income",
+                                    text = "Total Expenses",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "${formatCurrency(data.averageDailyIncome)}/day",
+                                text = formatCurrency(totalExpenses),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = AccentExpense
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Formula: Monthly Income ÷ 30",
+                                text = "${formatCurrency(avgExpense)}/day avg",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                         }
-                    }
-                }
-            }
-        }
-
-        // Requirement 11: Benchmark Tracking Card (Spending vs. Average Daily Income)
-        val isAbove = data.spendingStatus == "above"
-        val isBelow = data.spendingStatus == "below"
-
-        val statusBgColor = when {
-            isAbove -> Color(0xFFFFF1F2)
-            isBelow -> Color(0xFFECFDF5)
-            else -> Color(0xFFEFF6FF)
-        }
-        val statusBorderColor = when {
-            isAbove -> Color(0xFFF87171)
-            isBelow -> Color(0xFF34D399)
-            else -> Color(0xFF60A5FA)
-        }
-        val statusAccentColor = when {
-            isAbove -> Color(0xFFDC2626)
-            isBelow -> Color(0xFF059669)
-            else -> Color(0xFF2563EB)
-        }
-        val statusTitle = when {
-            isAbove -> "ABOVE AVERAGE INCOME"
-            isBelow -> "BELOW AVERAGE INCOME"
-            else -> "ON PAR WITH AVERAGE"
-        }
-        val statusIcon = when {
-            isAbove -> Icons.Default.Warning
-            isBelow -> Icons.Default.CheckCircle
-            else -> Icons.Default.CheckCircle
-        }
-
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            border = BorderStroke(1.5.dp, statusBorderColor),
-            colors = CardDefaults.cardColors(containerColor = statusBgColor),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("spending_benchmark_card")
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = statusIcon,
-                            contentDescription = null,
-                            tint = statusAccentColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Daily Spending Benchmark",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1E293B)
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = statusAccentColor.copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = statusTitle,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = statusAccentColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Comparison Values Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "Average Daily Income",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF64748B)
-                        )
-                        Text(
-                            text = formatCurrency(data.averageDailyIncome),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF0F172A)
-                        )
-                        Text(
-                            text = "Benchmark target",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8)
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Today's Daily Expenses",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF64748B)
-                        )
-                        Text(
-                            text = formatCurrency(data.todayExpenses),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isAbove) AccentExpense else Color(0xFF0F172A)
-                        )
-                        Text(
-                            text = "Recorded today",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF94A3B8)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Progress gauge
-                val progress = if (data.averageDailyIncome > 0) {
-                    (data.todayExpenses / data.averageDailyIncome).toFloat().coerceIn(0f, 1f)
-                } else if (data.todayExpenses > 0) 1f else 0f
-
-                LinearProgressIndicator(
-                    progress = { progress },
+                // Comparison Box: Expense Average vs Total Income Average
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, statusBorderColor.copy(alpha = 0.6f)),
+                    color = statusBgColor,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    color = statusAccentColor,
-                    trackColor = statusAccentColor.copy(alpha = 0.2f),
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Explicit user-specified status comparison text (Requirement 11)
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color.White.copy(alpha = 0.9f),
-                    border = BorderStroke(1.dp, statusBorderColor.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
+                        .testTag("income_expense_comparison_card")
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (isAbove) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
-                            contentDescription = null,
-                            tint = statusAccentColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = data.spendingComparisonText.ifBlank {
-                                    if (isAbove) "You are Rs. ${data.spendingDifference.toInt()} above your average daily income."
-                                    else "You are Rs. ${data.spendingDifference.toInt()} below your average daily income."
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0F172A)
-                            )
-                            Text(
-                                text = if (isAbove)
-                                    "Daily expenses exceed your benchmark by Rs. ${data.spendingDifference.toInt()}."
-                                else if (isBelow)
-                                    "You have Rs. ${data.spendingDifference.toInt()} remaining under your daily benchmark."
-                                else
-                                    "Spending matches your daily benchmark exactly.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF475569)
-                            )
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = statusIcon,
+                                    contentDescription = null,
+                                    tint = statusAccentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Daily Average Comparison",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E293B)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = statusAccentColor.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = statusTitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = statusAccentColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Daily Income Average",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF64748B)
+                                )
+                                Text(
+                                    text = "${formatCurrency(avgIncome)}/day",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F172A)
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "Daily Expense Average",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF64748B)
+                                )
+                                Text(
+                                    text = "${formatCurrency(avgExpense)}/day",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isAbove) AccentExpense else Color(0xFF0F172A)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val progress = if (avgIncome > 0.0) {
+                            (avgExpense / avgIncome).toFloat().coerceIn(0f, 1f)
+                        } else if (avgExpense > 0.0) 1f else 0f
+
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = statusAccentColor,
+                            trackColor = statusAccentColor.copy(alpha = 0.2f),
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = if (isAbove)
+                                "Your daily expense average is ${formatCurrency(diff)} above your daily income average."
+                            else if (isBelow)
+                                "Your daily expense average is ${formatCurrency(diff)} below your daily income average."
+                            else
+                                "Your daily expense average is on par with your daily income average.",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF1E293B)
+                        )
                     }
                 }
             }

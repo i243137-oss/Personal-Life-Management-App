@@ -87,24 +87,30 @@ const getDashboardSummary = async (req, res) => {
     // Sort available months descending (e.g. "2026-09", "2026-08")
     const availableMonths = Array.from(availableMonthsSet).sort((a, b) => b.localeCompare(a));
 
-    // Requirement 10: Average Daily Income = Total Monthly Income / 30
-    const averageDailyIncome = Math.round((monthlyIncome / 30) * 100) / 100;
+    // Total income and monthly income are the same
+    const totalIncome = monthlyIncome;
+    const totalExpenses = monthlyExpenses;
 
-    // Requirement 11: Benchmark comparison against average daily income
-    const diff = Math.abs(todayExpenses - averageDailyIncome);
+    // Average Daily Income = Total Income / 30
+    const averageDailyIncome = Math.round((totalIncome / 30) * 100) / 100;
+    // Average Daily Expense = Total Expenses / 30
+    const averageDailyExpense = Math.round((totalExpenses / 30) * 100) / 100;
+
+    // Compare expense average with total income average
+    const diff = Math.abs(averageDailyExpense - averageDailyIncome);
     const formattedDiff = Math.round(diff).toLocaleString();
     let spendingStatus = 'below';
     let spendingComparisonText = '';
 
-    if (todayExpenses > averageDailyIncome) {
+    if (averageDailyExpense > averageDailyIncome) {
       spendingStatus = 'above';
-      spendingComparisonText = `You are Rs. ${formattedDiff} above your average daily income.`;
-    } else if (todayExpenses < averageDailyIncome) {
+      spendingComparisonText = `Your daily expense average is Rs. ${formattedDiff} above your daily income average.`;
+    } else if (averageDailyExpense < averageDailyIncome) {
       spendingStatus = 'below';
-      spendingComparisonText = `You are Rs. ${formattedDiff} below your average daily income.`;
+      spendingComparisonText = `Your daily expense average is Rs. ${formattedDiff} below your daily income average.`;
     } else {
       spendingStatus = 'on_par';
-      spendingComparisonText = `Your daily spending is right on par with your average daily income.`;
+      spendingComparisonText = `Your daily expense average is on par with your daily income average.`;
     }
 
     // Compute active loan metrics (youOwe vs othersOwe)
@@ -174,9 +180,12 @@ const getDashboardSummary = async (req, res) => {
         recentActivity,
         selectedMonth: activeMonth,
         monthDisplayName,
+        totalIncome,
         monthlyIncome,
+        totalExpenses,
         monthlyExpenses,
         averageDailyIncome,
+        averageDailyExpense,
         spendingStatus,
         spendingDifference: diff,
         spendingComparisonText,

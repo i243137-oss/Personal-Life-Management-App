@@ -497,21 +497,27 @@ class LocalDataManager(context: Context) {
         val currentBalance = totalAllTimeIncome - totalAllTimeExpenses
         val availableMonths = monthsSet.sortedDescending()
 
-        // Requirement 10: Average Daily Income = Total Monthly Income / 30
-        val averageDailyIncome = monthlyIncome / 30.0
+        // Total income and monthly income are the same
+        val totalIncome = monthlyIncome
+        val totalExpenses = monthlyExpenses
 
-        // Requirement 11: Benchmark comparison against average daily income
-        val diff = kotlin.math.abs(todayExpenses - averageDailyIncome)
+        // Average Daily Income = Total Income / 30
+        val averageDailyIncome = totalIncome / 30.0
+        // Average Daily Expense = Total Expenses / 30
+        val averageDailyExpense = totalExpenses / 30.0
+
+        // Compare expense average with total income average
+        val diff = kotlin.math.abs(averageDailyExpense - averageDailyIncome)
         val formattedDiff = NumberFormat.getNumberInstance(Locale.US).apply { maximumFractionDigits = 0 }.format(diff)
         val (spendingStatus, spendingComparisonText) = when {
-            todayExpenses > averageDailyIncome -> {
-                "above" to "You are Rs. $formattedDiff above your average daily income."
+            averageDailyExpense > averageDailyIncome -> {
+                "above" to "Your daily expense average is Rs. $formattedDiff above your daily income average."
             }
-            todayExpenses < averageDailyIncome -> {
-                "below" to "You are Rs. $formattedDiff below your average daily income."
+            averageDailyExpense < averageDailyIncome -> {
+                "below" to "Your daily expense average is Rs. $formattedDiff below your daily income average."
             }
             else -> {
-                "on_par" to "Your daily spending is right on par with your average daily income."
+                "on_par" to "Your daily expense average is on par with your daily income average."
             }
         }
 
@@ -554,9 +560,12 @@ class LocalDataManager(context: Context) {
             recentActivity = txs.take(5),
             selectedMonth = activeMonth,
             monthDisplayName = monthDisplayName,
+            totalIncome = totalIncome,
             monthlyIncome = monthlyIncome,
+            totalExpenses = totalExpenses,
             monthlyExpenses = monthlyExpenses,
             averageDailyIncome = averageDailyIncome,
+            averageDailyExpense = averageDailyExpense,
             spendingStatus = spendingStatus,
             spendingDifference = diff,
             spendingComparisonText = spendingComparisonText,

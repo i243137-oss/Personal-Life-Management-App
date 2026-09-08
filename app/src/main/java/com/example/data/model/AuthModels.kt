@@ -68,12 +68,15 @@ data class DashboardData(
     @Json(name = "totalNotesCount") val totalNotesCount: Int = 0,
     @Json(name = "pinnedNotesCount") val pinnedNotesCount: Int = 0,
     @Json(name = "recentActivity") val recentActivity: List<TransactionDto> = emptyList(),
-    // Monthly Financial Period & Spending Benchmark (Requirements 8, 9, 10, 11)
+    // Monthly Financial Period & Average Comparison
     @Json(name = "selectedMonth") val selectedMonth: String = "",
     @Json(name = "monthDisplayName") val monthDisplayName: String = "",
+    @Json(name = "totalIncome") val totalIncome: Double = 0.0,
     @Json(name = "monthlyIncome") val monthlyIncome: Double = 0.0,
+    @Json(name = "totalExpenses") val totalExpenses: Double = 0.0,
     @Json(name = "monthlyExpenses") val monthlyExpenses: Double = 0.0,
     @Json(name = "averageDailyIncome") val averageDailyIncome: Double = 0.0,
+    @Json(name = "averageDailyExpense") val averageDailyExpense: Double = 0.0,
     @Json(name = "spendingStatus") val spendingStatus: String = "below", // "above" | "below" | "on_par"
     @Json(name = "spendingDifference") val spendingDifference: Double = 0.0,
     @Json(name = "spendingComparisonText") val spendingComparisonText: String = "",

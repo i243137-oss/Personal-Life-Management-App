@@ -342,10 +342,19 @@ function App() {
       .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
   }, [transactions, activeFinancialMonth]);
 
-  // Requirement 10: Average Daily Income = Total Monthly Income / 30
+  // Total income and monthly income are the same
+  const totalIncome = monthlyIncome;
+  const totalExpenses = monthlyExpenses;
+
+  // Average Daily Income = Total Income / 30
   const averageDailyIncome = useMemo(() => {
-    return Math.round((monthlyIncome / 30) * 100) / 100;
-  }, [monthlyIncome]);
+    return Math.round((totalIncome / 30) * 100) / 100;
+  }, [totalIncome]);
+
+  // Average Daily Expense = Total Expenses / 30
+  const averageDailyExpense = useMemo(() => {
+    return Math.round((totalExpenses / 30) * 100) / 100;
+  }, [totalExpenses]);
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
@@ -355,27 +364,27 @@ function App() {
       .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
   }, [transactions, todayStr]);
 
-  // Requirement 11: Benchmark comparison against average daily income
+  // Compare expense average with total income average
   const spendingDifference = useMemo(() => {
-    return Math.abs(todayDailyExpenses - averageDailyIncome);
-  }, [todayDailyExpenses, averageDailyIncome]);
+    return Math.abs(averageDailyExpense - averageDailyIncome);
+  }, [averageDailyExpense, averageDailyIncome]);
 
   const spendingStatus = useMemo(() => {
-    if (todayDailyExpenses > averageDailyIncome) return 'above';
-    if (todayDailyExpenses < averageDailyIncome) return 'below';
+    if (averageDailyExpense > averageDailyIncome) return 'above';
+    if (averageDailyExpense < averageDailyIncome) return 'below';
     return 'on_par';
-  }, [todayDailyExpenses, averageDailyIncome]);
+  }, [averageDailyExpense, averageDailyIncome]);
 
   const spendingComparisonText = useMemo(() => {
     const formattedDiff = Math.round(spendingDifference).toLocaleString();
-    if (todayDailyExpenses > averageDailyIncome) {
-      return `You are Rs. ${formattedDiff} above your average daily income.`;
-    } else if (todayDailyExpenses < averageDailyIncome) {
-      return `You are Rs. ${formattedDiff} below your average daily income.`;
+    if (averageDailyExpense > averageDailyIncome) {
+      return `Your daily expense average is Rs. ${formattedDiff} above your daily income average.`;
+    } else if (averageDailyExpense < averageDailyIncome) {
+      return `Your daily expense average is Rs. ${formattedDiff} below your daily income average.`;
     } else {
-      return `Your daily spending is right on par with your average daily income.`;
+      return `Your daily expense average is on par with your daily income average.`;
     }
-  }, [todayDailyExpenses, averageDailyIncome, spendingDifference]);
+  }, [averageDailyExpense, averageDailyIncome, spendingDifference]);
 
   // Trip stats
   const activeTrip = useMemo(() => trips.find(t => t._id === activeTripId) || trips[0] || null, [trips, activeTripId]);
@@ -926,9 +935,10 @@ function App() {
               setSelectedFinancialMonth={setSelectedFinancialMonth}
               availableFinancialMonths={availableFinancialMonths}
               monthDisplayName={monthDisplayName}
-              monthlyIncome={monthlyIncome}
-              monthlyExpenses={monthlyExpenses}
+              totalIncome={totalIncome}
+              totalExpenses={totalExpenses}
               averageDailyIncome={averageDailyIncome}
+              averageDailyExpense={averageDailyExpense}
               spendingStatus={spendingStatus}
               spendingDifference={spendingDifference}
               spendingComparisonText={spendingComparisonText}
@@ -1320,9 +1330,10 @@ function DashboardView({
   setSelectedFinancialMonth,
   availableFinancialMonths = [],
   monthDisplayName = '',
-  monthlyIncome = 0,
-  monthlyExpenses = 0,
+  totalIncome = 0,
+  totalExpenses = 0,
   averageDailyIncome = 0,
+  averageDailyExpense = 0,
   spendingStatus = 'on_par',
   spendingDifference = 0,
   spendingComparisonText = ''
@@ -1347,7 +1358,7 @@ function DashboardView({
         </button>
       </div>
 
-      {/* Requirement 8: Monthly Financial Period Selector */}
+      {/* Monthly Financial Period Selector */}
       <div className="bg-white/80 dark:bg-[#191D1B]/80 rounded-2xl p-3.5 border border-[#DCE5DF] dark:border-[#404944] shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -1359,7 +1370,7 @@ function DashboardView({
                 {monthDisplayName || 'Current Financial Period'}
               </div>
               <div className="text-[10px] text-[#404944] dark:text-[#C0C9C3]">
-                Cycle resets 1st of month · Historical data preserved
+                Monthly Overview
               </div>
             </div>
           </div>
@@ -1401,7 +1412,7 @@ function DashboardView({
         )}
       </div>
 
-      {/* Signature Primary Balance Card (Gradient matching Android AccentCardBackground) */}
+      {/* Signature Primary Balance Card */}
       <div className="rounded-3xl p-6 text-white shadow-lg bg-gradient-to-br from-[#0F6D54] to-[#074837] relative overflow-hidden elevation-3">
         <div className="flex items-center gap-2.5 mb-3">
           <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
@@ -1415,14 +1426,14 @@ function DashboardView({
         </div>
         <div className="text-[11px] text-[#A2DFC7] flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-[#A6F2D6] animate-pulse"></span>
-          Real-time balance from MongoDB source of truth
+          Available Balance
         </div>
       </div>
 
-      {/* Requirements 9 & 10: Monthly Income & Average Daily Income Breakdown */}
+      {/* Monthly Financial Overview: Total Income, Total Expenses, and Daily Averages Comparison */}
       <div className="bg-white dark:bg-[#191D1B] rounded-2xl p-4 border border-[#DCE5DF]/70 dark:border-[#404944]/50 shadow-sm elevation-1 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Monthly Financial Breakdown</span>
+          <span className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Monthly Financial Overview</span>
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0F6D54]/10 text-[#0F6D54] dark:text-[#8AD5BB] font-semibold">
             {monthDisplayName}
           </span>
@@ -1432,105 +1443,87 @@ function DashboardView({
           <div className="bg-[#059669]/10 dark:bg-[#059669]/15 rounded-xl p-3 border border-[#059669]/20 flex flex-col justify-between">
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#059669] dark:text-[#34D399]">
               <Icon name="trending-up" className="w-3.5 h-3.5" />
-              <span>Monthly Income</span>
+              <span>Total Income</span>
             </div>
             <div className="text-sm font-extrabold text-[#059669] dark:text-[#34D399] mt-1 truncate">
-              {formatCurrency(monthlyIncome)}
+              {formatCurrency(totalIncome)}
             </div>
             <div className="text-[9px] text-[#404944] dark:text-[#C0C9C3] mt-0.5">
-              Actual database transactions
+              {formatCurrency(averageDailyIncome)}/day avg
             </div>
           </div>
 
-          <div className="bg-[#3B82F6]/10 dark:bg-[#3B82F6]/15 rounded-xl p-3 border border-[#3B82F6]/20 flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#2563EB] dark:text-[#60A5FA]">
-              <Icon name="calculator" className="w-3.5 h-3.5" />
-              <span>Avg Daily Income</span>
+          <div className="bg-[#DC2626]/10 dark:bg-[#DC2626]/15 rounded-xl p-3 border border-[#DC2626]/20 flex flex-col justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#DC2626] dark:text-[#F87171]">
+              <Icon name="trending-down" className="w-3.5 h-3.5" />
+              <span>Total Expenses</span>
             </div>
-            <div className="text-sm font-extrabold text-[#1E3A8A] dark:text-[#93C5FD] mt-1 truncate">
-              {formatCurrency(averageDailyIncome)}/day
+            <div className="text-sm font-extrabold text-[#DC2626] dark:text-[#F87171] mt-1 truncate">
+              {formatCurrency(totalExpenses)}
             </div>
-            <div className="text-[9px] text-[#2563EB] dark:text-[#60A5FA] mt-0.5 font-medium">
-              Formula: Monthly Income ÷ 30
+            <div className="text-[9px] text-[#404944] dark:text-[#C0C9C3] mt-0.5">
+              {formatCurrency(averageDailyExpense)}/day avg
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Requirement 11: Benchmark Tracking Card (Spending vs. Average Daily Income) */}
-      <div className={`rounded-2xl p-4 border transition ${
-        isAbove
-          ? 'bg-rose-50/80 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/50'
-          : isBelow
-          ? 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-900/50'
-          : 'bg-blue-50/80 dark:bg-blue-950/20 border-blue-300 dark:border-blue-900/50'
-      }`}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Icon
-              name={isAbove ? 'alert-triangle' : 'check-circle'}
-              className={`w-4 h-4 ${isAbove ? 'text-rose-600' : isBelow ? 'text-emerald-600' : 'text-blue-600'}`}
-            />
-            <span className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Daily Spending Benchmark</span>
-          </div>
-          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-            isAbove
-              ? 'bg-rose-600/15 text-rose-700 dark:text-rose-300'
-              : isBelow
-              ? 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-300'
-              : 'bg-blue-600/15 text-blue-700 dark:text-blue-300'
-          }`}>
-            {isAbove ? 'Above Average Income' : isBelow ? 'Below Average Income' : 'On Par With Average'}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs mb-2.5">
-          <div>
-            <div className="text-[10px] text-gray-500 dark:text-gray-400">Average Daily Income</div>
-            <div className="font-bold text-[#191C1B] dark:text-[#E1E3DF]">{formatCurrency(averageDailyIncome)}</div>
-            <div className="text-[9px] text-gray-400">Benchmark target</div>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] text-gray-500 dark:text-gray-400">Today's Daily Expenses</div>
-            <div className={`font-bold ${isAbove ? 'text-rose-600' : 'text-[#191C1B] dark:text-[#E1E3DF]'}`}>
-              {formatCurrency(todayExpenses)}
-            </div>
-            <div className="text-[9px] text-gray-400">Recorded today</div>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-3 overflow-hidden">
-          <div
-            className={`h-2 rounded-full transition-all ${
-              isAbove ? 'bg-rose-600' : isBelow ? 'bg-emerald-500' : 'bg-blue-500'
-            }`}
-            style={{
-              width: `${Math.min(100, averageDailyIncome > 0 ? (todayExpenses / averageDailyIncome) * 100 : todayExpenses > 0 ? 100 : 0)}%`
-            }}
-          ></div>
-        </div>
-
-        {/* Requirement 11: Explicit user-specified status comparison text */}
-        <div className="bg-white/90 dark:bg-[#191D1B]/90 rounded-xl p-3 border border-black/5 dark:border-white/5 flex items-center gap-2.5">
-          <Icon
-            name={isAbove ? 'trending-up' : 'trending-down'}
-            className={`w-4 h-4 flex-shrink-0 ${isAbove ? 'text-rose-600' : 'text-emerald-600'}`}
-          />
-          <div>
-            <div className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">
-              {spendingComparisonText || (isAbove
-                ? `You are Rs. ${Math.round(spendingDifference).toLocaleString()} above your average daily income.`
-                : `You are Rs. ${Math.round(spendingDifference).toLocaleString()} below your average daily income.`
-              )}
+        {/* Daily Average Comparison (Expense Average vs Income Average) */}
+        <div className={`rounded-xl p-3.5 border transition ${
+          isAbove
+            ? 'bg-rose-50/80 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/50'
+            : isBelow
+            ? 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-900/50'
+            : 'bg-blue-50/80 dark:bg-blue-950/20 border-blue-300 dark:border-blue-900/50'
+        }`}>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <Icon
+                name={isAbove ? 'alert-triangle' : 'check-circle'}
+                className={`w-4 h-4 ${isAbove ? 'text-rose-600' : isBelow ? 'text-emerald-600' : 'text-blue-600'}`}
+              />
+              <span className="text-xs font-bold text-[#191C1B] dark:text-[#E1E3DF]">Daily Average Comparison</span>
             </div>
-            <div className="text-[10px] text-gray-500 dark:text-gray-400">
-              {isAbove
-                ? `Daily expenses exceed your benchmark by Rs. ${Math.round(spendingDifference).toLocaleString()}.`
+            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+              isAbove
+                ? 'bg-rose-600/15 text-rose-700 dark:text-rose-300'
                 : isBelow
-                ? `You have Rs. ${Math.round(spendingDifference).toLocaleString()} remaining under your daily benchmark.`
-                : 'Spending matches your daily benchmark exactly.'}
+                ? 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-300'
+                : 'bg-blue-600/15 text-blue-700 dark:text-blue-300'
+            }`}>
+              {isAbove ? 'Expenses Exceed Income' : isBelow ? 'Within Income Budget' : 'Balanced'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+            <div>
+              <div className="text-[10px] text-gray-500 dark:text-gray-400">Daily Income Average</div>
+              <div className="font-bold text-[#191C1B] dark:text-[#E1E3DF]">{formatCurrency(averageDailyIncome)}/day</div>
             </div>
+            <div className="text-right">
+              <div className="text-[10px] text-gray-500 dark:text-gray-400">Daily Expense Average</div>
+              <div className={`font-bold ${isAbove ? 'text-rose-600' : 'text-[#191C1B] dark:text-[#E1E3DF]'}`}>
+                {formatCurrency(averageDailyExpense)}/day
+              </div>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-2.5 overflow-hidden">
+            <div
+              className={`h-1.5 rounded-full transition-all ${
+                isAbove ? 'bg-rose-600' : isBelow ? 'bg-emerald-500' : 'bg-blue-500'
+              }`}
+              style={{
+                width: `${Math.min(100, averageDailyIncome > 0 ? (averageDailyExpense / averageDailyIncome) * 100 : averageDailyExpense > 0 ? 100 : 0)}%`
+              }}
+            ></div>
+          </div>
+
+          <div className="text-xs font-medium text-[#191C1B] dark:text-[#E1E3DF]">
+            {spendingComparisonText || (isAbove
+              ? `Your daily expense average is Rs. ${Math.round(spendingDifference).toLocaleString()} above your daily income average.`
+              : `Your daily expense average is Rs. ${Math.round(spendingDifference).toLocaleString()} below your daily income average.`
+            )}
           </div>
         </div>
       </div>
