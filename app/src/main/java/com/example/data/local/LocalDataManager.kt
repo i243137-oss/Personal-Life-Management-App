@@ -335,6 +335,9 @@ class LocalDataManager(context: Context) {
         if (idx == -1) return null
 
         val old = current[idx]
+        if (status == "paid" && old.remainingAmount > 0) {
+            return recordRepayment(loanId, old.remainingAmount, "Full settlement")
+        }
         val newRemaining = if (status == "paid") 0.0 else old.remainingAmount
         val updated = old.copy(status = status, remainingAmount = newRemaining)
         current[idx] = updated
