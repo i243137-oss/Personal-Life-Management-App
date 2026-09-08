@@ -142,7 +142,7 @@ fun LuggageScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Luggage & Packing",
                                 style = MaterialTheme.typography.headlineMedium,
@@ -154,6 +154,8 @@ fun LuggageScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(

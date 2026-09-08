@@ -178,7 +178,7 @@ fun DictionaryScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Smart Dictionary",
@@ -218,6 +218,7 @@ fun DictionaryScreen(
                     }
 
                     if (uiState.learnedWords.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
                         OutlinedButton(
                             onClick = { dictionaryViewModel.startQuiz() },
                             shape = RoundedCornerShape(10.dp),
@@ -701,8 +702,8 @@ private fun WordResultCard(
                         }
 
                         // Syllables and written/IPA pronunciation
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                        FlowRow(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.padding(top = 4.dp)
                         ) {
@@ -745,6 +746,8 @@ private fun WordResultCard(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     // Save / Bookmark Action
                     Box {

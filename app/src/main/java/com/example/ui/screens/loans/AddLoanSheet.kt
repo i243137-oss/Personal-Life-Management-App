@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -114,7 +115,8 @@ fun AddLoanSheet(
                 Text(
                     text = "Add Udhar / Loan Record",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(imageVector = Icons.Filled.Close, contentDescription = "Close")
@@ -421,7 +423,7 @@ fun AddLoanSheet(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .heightIn(min = 52.dp)
                     .testTag("save_loan_button")
             ) {
                 if (isSubmitting) {

@@ -452,7 +452,10 @@ fun DashboardMetricsSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
@@ -481,6 +484,8 @@ fun DashboardMetricsSection(
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -672,11 +677,13 @@ fun TransactionItemRow(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = tx.category,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (!tx.description.isNullOrBlank()) {
                         Text(
@@ -690,10 +697,14 @@ fun TransactionItemRow(
                 }
             }
 
+            Spacer(modifier = Modifier.width(8.dp))
+
             Text(
                 text = "$amountPrefix${formatCurrency(tx.amount)}",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = amountColor
+                color = amountColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
