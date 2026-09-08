@@ -351,10 +351,30 @@ function App() {
     return Math.round((totalIncome / 30) * 100) / 100;
   }, [totalIncome]);
 
-  // Average Daily Expense = Total Expenses / 30
+  // Average Daily Expense = Total Expenses / days elapsed in month (e.g., if today is 12th, divide by 12)
   const averageDailyExpense = useMemo(() => {
-    return Math.round((totalExpenses / 30) * 100) / 100;
-  }, [totalExpenses]);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1;
+    const currentDayOfMonth = Math.max(1, now.getDate());
+
+    let [activeYear, activeMonthNum] = (activeFinancialMonth || '').split('-').map(Number);
+    if (!activeYear || !activeMonthNum) {
+      activeYear = currentYear;
+      activeMonthNum = currentMonthNum;
+    }
+
+    let daysForExpense = 1;
+    if (activeYear === currentYear && activeMonthNum === currentMonthNum) {
+      daysForExpense = currentDayOfMonth;
+    } else if (activeYear < currentYear || (activeYear === currentYear && activeMonthNum < currentMonthNum)) {
+      daysForExpense = new Date(activeYear, activeMonthNum, 0).getDate() || 30;
+    } else {
+      daysForExpense = 1;
+    }
+
+    return Math.round((totalExpenses / daysForExpense) * 100) / 100;
+  }, [totalExpenses, activeFinancialMonth]);
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 

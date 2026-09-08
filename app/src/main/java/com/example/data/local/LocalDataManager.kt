@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
@@ -501,10 +502,36 @@ class LocalDataManager(context: Context) {
         val totalIncome = monthlyIncome
         val totalExpenses = monthlyExpenses
 
+        // Calculate days elapsed for expenses average (e.g. if today is 12th, divide by 12)
+        val cal = Calendar.getInstance()
+        val currentYear = cal.get(Calendar.YEAR)
+        val currentMonthNum = cal.get(Calendar.MONTH) + 1 // 1-12
+        val currentDayOfMonth = cal.get(Calendar.DAY_OF_MONTH).coerceAtLeast(1)
+
+        val (activeYear, activeMonthNum) = try {
+            val parts = activeMonth.split("-")
+            parts[0].toInt() to parts[1].toInt()
+        } catch (_: Exception) {
+            currentYear to currentMonthNum
+        }
+
+        val daysForExpense = when {
+            activeYear == currentYear && activeMonthNum == currentMonthNum -> currentDayOfMonth
+            activeYear < currentYear || (activeYear == currentYear && activeMonthNum < currentMonthNum) -> {
+                val tempCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, activeYear)
+                    set(Calendar.MONTH, activeMonthNum - 1)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                }
+                tempCal.getActualMaximum(Calendar.DAY_OF_MONTH).coerceAtLeast(1)
+            }
+            else -> 1
+        }
+
         // Average Daily Income = Total Income / 30
         val averageDailyIncome = totalIncome / 30.0
-        // Average Daily Expense = Total Expenses / 30
-        val averageDailyExpense = totalExpenses / 30.0
+        // Average Daily Expense = Total Expenses / days elapsed in month
+        val averageDailyExpense = totalExpenses / daysForExpense.toDouble()
 
         // Compare expense average with total income average
         val diff = kotlin.math.abs(averageDailyExpense - averageDailyIncome)

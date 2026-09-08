@@ -91,10 +91,33 @@ const getDashboardSummary = async (req, res) => {
     const totalIncome = monthlyIncome;
     const totalExpenses = monthlyExpenses;
 
+    // Days elapsed calculation for expenses average
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthNum = now.getMonth() + 1; // 1-12
+    const currentDayOfMonth = Math.max(1, now.getDate());
+
+    let [activeYear, activeMonthNum] = activeMonth.split('-').map(Number);
+    if (!activeYear || !activeMonthNum) {
+      activeYear = currentYear;
+      activeMonthNum = currentMonthNum;
+    }
+
+    let daysForExpense = 1;
+    if (activeYear === currentYear && activeMonthNum === currentMonthNum) {
+      // If current month: divide by current day of month (e.g., if 12th, divide by 12)
+      daysForExpense = currentDayOfMonth;
+    } else if (activeYear < currentYear || (activeYear === currentYear && activeMonthNum < currentMonthNum)) {
+      // Historical past month: divide by total days in that month
+      daysForExpense = new Date(activeYear, activeMonthNum, 0).getDate() || 30;
+    } else {
+      daysForExpense = 1;
+    }
+
     // Average Daily Income = Total Income / 30
     const averageDailyIncome = Math.round((totalIncome / 30) * 100) / 100;
-    // Average Daily Expense = Total Expenses / 30
-    const averageDailyExpense = Math.round((totalExpenses / 30) * 100) / 100;
+    // Average Daily Expense = Total Expenses / days elapsed in month
+    const averageDailyExpense = Math.round((totalExpenses / daysForExpense) * 100) / 100;
 
     // Compare expense average with total income average
     const diff = Math.abs(averageDailyExpense - averageDailyIncome);

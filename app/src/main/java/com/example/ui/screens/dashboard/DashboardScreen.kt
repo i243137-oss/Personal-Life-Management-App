@@ -67,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Calendar
 import com.example.data.model.DashboardData
 import com.example.data.model.TransactionDto
 import com.example.data.model.UserDto
@@ -443,8 +444,34 @@ fun DashboardMetricsSection(
         // Monthly Financial Overview: Total Income, Total Expenses, and Daily Averages Comparison
         val totalIncome = if (data.totalIncome > 0.0) data.totalIncome else data.monthlyIncome
         val totalExpenses = if (data.totalExpenses > 0.0) data.totalExpenses else data.monthlyExpenses
+
+        val cal = Calendar.getInstance()
+        val currentYear = cal.get(Calendar.YEAR)
+        val currentMonthNum = cal.get(Calendar.MONTH) + 1
+        val currentDayOfMonth = cal.get(Calendar.DAY_OF_MONTH).coerceAtLeast(1)
+
+        val (activeYear, activeMonthNum) = try {
+            val parts = data.selectedMonth.split("-")
+            parts[0].toInt() to parts[1].toInt()
+        } catch (_: Exception) {
+            currentYear to currentMonthNum
+        }
+
+        val daysForExpense = when {
+            activeYear == currentYear && activeMonthNum == currentMonthNum -> currentDayOfMonth
+            activeYear < currentYear || (activeYear == currentYear && activeMonthNum < currentMonthNum) -> {
+                val tempCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, activeYear)
+                    set(Calendar.MONTH, activeMonthNum - 1)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                }
+                tempCal.getActualMaximum(Calendar.DAY_OF_MONTH).coerceAtLeast(1)
+            }
+            else -> 1
+        }
+
         val avgIncome = if (data.averageDailyIncome > 0.0) data.averageDailyIncome else totalIncome / 30.0
-        val avgExpense = if (data.averageDailyExpense > 0.0) data.averageDailyExpense else totalExpenses / 30.0
+        val avgExpense = if (data.averageDailyExpense > 0.0) data.averageDailyExpense else totalExpenses / daysForExpense.toDouble()
 
         val isAbove = avgExpense > avgIncome
         val isBelow = avgExpense < avgIncome
