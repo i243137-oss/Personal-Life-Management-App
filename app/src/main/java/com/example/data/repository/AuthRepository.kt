@@ -102,19 +102,19 @@ class DashboardRepository(
     private val apiClient: ApiClient,
     private val localDataManager: LocalDataManager
 ) {
-    suspend fun getDashboardSummary(): Result<DashboardData> {
+    suspend fun getDashboardSummary(month: String? = null): Result<DashboardData> {
         return try {
             val api = apiClient.getApiService()
-            val response = api.getDashboardSummary()
+            val response = api.getDashboardSummary(month)
             if (response.isSuccessful && response.body()?.data != null) {
                 Result.success(response.body()!!.data!!)
             } else {
                 // Return local dashboard calculation
-                Result.success(localDataManager.getDashboardData())
+                Result.success(localDataManager.getDashboardData(month))
             }
         } catch (e: Exception) {
             // Seamless offline fallback
-            Result.success(localDataManager.getDashboardData())
+            Result.success(localDataManager.getDashboardData(month))
         }
     }
 }

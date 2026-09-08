@@ -9,6 +9,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 interface AuthApiService {
 
@@ -26,5 +27,7 @@ interface AuthApiService {
     suspend fun getMe(): Response<UserResponse>
 
     @GET("api/dashboard/summary")
-    suspend fun getDashboardSummary(): Response<DashboardResponse>
+    suspend fun getDashboardSummary(
+        @Query("month") month: String? = null
+    ): Response<DashboardResponse>
 }

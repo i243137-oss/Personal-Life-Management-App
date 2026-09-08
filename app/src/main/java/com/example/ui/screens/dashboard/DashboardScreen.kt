@@ -1,5 +1,6 @@
 package com.example.ui.screens.dashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,22 +27,32 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,6 +76,8 @@ import com.example.ui.theme.AccentIncome
 import com.example.ui.theme.AccentLoan
 import com.example.ui.viewmodel.DashboardUiState
 import com.example.ui.viewmodel.DashboardViewModel
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -74,6 +88,7 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
+    val selectedMonth by dashboardViewModel.selectedMonth.collectAsState()
     val greeting = dashboardViewModel.getTimeBasedGreeting()
 
     LazyColumn(
@@ -169,6 +184,8 @@ fun DashboardScreen(
                     DashboardMetricsSection(
                         data = state.data,
                         formatCurrency = { dashboardViewModel.formatCurrency(it) },
+                        selectedMonth = selectedMonth,
+                        onMonthSelect = { dashboardViewModel.selectMonth(it) },
                         onLuggageClick = { onQuickActionClick("luggage") },
                         onNotesClick = { onQuickActionClick("add_note") }
                     )
@@ -259,6 +276,8 @@ fun DashboardScreen(
 fun DashboardMetricsSection(
     data: DashboardData,
     formatCurrency: (Double) -> String,
+    selectedMonth: String? = null,
+    onMonthSelect: (String?) -> Unit = {},
     onLuggageClick: () -> Unit = {},
     onNotesClick: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -267,6 +286,91 @@ fun DashboardMetricsSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Requirement 8: Monthly Financial Period Selector & Header
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("monthly_cycle_header")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (data.monthDisplayName.isNotBlank()) data.monthDisplayName else "Current Financial Period",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Cycle resets 1st of month · Historical data preserved",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (selectedMonth != null) {
+                        TextButton(
+                            onClick = { onMonthSelect(null) },
+                            modifier = Modifier.testTag("reset_to_current_month_button")
+                        ) {
+                            Text("Current Month", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+
+                if (data.availableMonths.size > 1) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(data.availableMonths) { m ->
+                            val isSelected = (selectedMonth == m) || (selectedMonth == null && m == data.selectedMonth)
+                            val label = try {
+                                val parsed = SimpleDateFormat("yyyy-MM", Locale.US).parse(m)
+                                if (parsed != null) SimpleDateFormat("MMM yyyy", Locale.US).format(parsed) else m
+                            } catch (_: Exception) {
+                                m
+                            }
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onMonthSelect(if (isSelected && selectedMonth != null) null else m) },
+                                label = { Text(label) },
+                                modifier = Modifier.testTag("month_chip_$m")
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Main Primary Card: Current Balance
         Card(
             shape = RoundedCornerShape(24.dp),
@@ -332,6 +436,320 @@ fun DashboardMetricsSection(
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFA2DFC7)
                     )
+                }
+            }
+        }
+
+        // Requirements 9 & 10: Monthly Income & Average Daily Income Card
+        ElevatedCard(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("monthly_income_card")
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Monthly Financial Breakdown",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    ) {
+                        Text(
+                            text = data.monthDisplayName.ifBlank { "Current Period" },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Column 1: Monthly Income
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF059669).copy(alpha = 0.08f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.TrendingUp,
+                                    contentDescription = null,
+                                    tint = Color(0xFF059669),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Monthly Income",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = formatCurrency(data.monthlyIncome),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF059669)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Actual database transactions",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+
+                    // Column 2: Average Daily Income (Monthly Income / 30)
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Calculate,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Avg Daily Income",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "${formatCurrency(data.averageDailyIncome)}/day",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Formula: Monthly Income ÷ 30",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Requirement 11: Benchmark Tracking Card (Spending vs. Average Daily Income)
+        val isAbove = data.spendingStatus == "above"
+        val isBelow = data.spendingStatus == "below"
+
+        val statusBgColor = when {
+            isAbove -> Color(0xFFFFF1F2)
+            isBelow -> Color(0xFFECFDF5)
+            else -> Color(0xFFEFF6FF)
+        }
+        val statusBorderColor = when {
+            isAbove -> Color(0xFFF87171)
+            isBelow -> Color(0xFF34D399)
+            else -> Color(0xFF60A5FA)
+        }
+        val statusAccentColor = when {
+            isAbove -> Color(0xFFDC2626)
+            isBelow -> Color(0xFF059669)
+            else -> Color(0xFF2563EB)
+        }
+        val statusTitle = when {
+            isAbove -> "ABOVE AVERAGE INCOME"
+            isBelow -> "BELOW AVERAGE INCOME"
+            else -> "ON PAR WITH AVERAGE"
+        }
+        val statusIcon = when {
+            isAbove -> Icons.Default.Warning
+            isBelow -> Icons.Default.CheckCircle
+            else -> Icons.Default.CheckCircle
+        }
+
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.5.dp, statusBorderColor),
+            colors = CardDefaults.cardColors(containerColor = statusBgColor),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("spending_benchmark_card")
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = null,
+                            tint = statusAccentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Daily Spending Benchmark",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = statusAccentColor.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = statusTitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = statusAccentColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Comparison Values Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "Average Daily Income",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF64748B)
+                        )
+                        Text(
+                            text = formatCurrency(data.averageDailyIncome),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            text = "Benchmark target",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Today's Daily Expenses",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF64748B)
+                        )
+                        Text(
+                            text = formatCurrency(data.todayExpenses),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isAbove) AccentExpense else Color(0xFF0F172A)
+                        )
+                        Text(
+                            text = "Recorded today",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Progress gauge
+                val progress = if (data.averageDailyIncome > 0) {
+                    (data.todayExpenses / data.averageDailyIncome).toFloat().coerceIn(0f, 1f)
+                } else if (data.todayExpenses > 0) 1f else 0f
+
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = statusAccentColor,
+                    trackColor = statusAccentColor.copy(alpha = 0.2f),
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Explicit user-specified status comparison text (Requirement 11)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.White.copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, statusBorderColor.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isAbove) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                            contentDescription = null,
+                            tint = statusAccentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = data.spendingComparisonText.ifBlank {
+                                    if (isAbove) "You are Rs. ${data.spendingDifference.toInt()} above your average daily income."
+                                    else "You are Rs. ${data.spendingDifference.toInt()} below your average daily income."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F172A)
+                            )
+                            Text(
+                                text = if (isAbove)
+                                    "Daily expenses exceed your benchmark by Rs. ${data.spendingDifference.toInt()}."
+                                else if (isBelow)
+                                    "You have Rs. ${data.spendingDifference.toInt()} remaining under your daily benchmark."
+                                else
+                                    "Spending matches your daily benchmark exactly.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF475569)
+                            )
+                        }
+                    }
                 }
             }
         }

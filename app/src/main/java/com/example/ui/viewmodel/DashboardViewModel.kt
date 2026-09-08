@@ -26,6 +26,9 @@ class DashboardViewModel(
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
+    private val _selectedMonth = MutableStateFlow<String?>(null)
+    val selectedMonth: StateFlow<String?> = _selectedMonth.asStateFlow()
+
     private val numberFormatter = NumberFormat.getNumberInstance(Locale.US).apply {
         maximumFractionDigits = 0
     }
@@ -34,10 +37,10 @@ class DashboardViewModel(
         loadDashboard()
     }
 
-    fun loadDashboard() {
+    fun loadDashboard(month: String? = _selectedMonth.value) {
         _uiState.value = DashboardUiState.Loading
         viewModelScope.launch {
-            dashboardRepository.getDashboardSummary()
+            dashboardRepository.getDashboardSummary(month)
                 .onSuccess { summary ->
                     _uiState.value = DashboardUiState.Success(summary)
                 }
@@ -47,6 +50,15 @@ class DashboardViewModel(
                     )
                 }
         }
+    }
+
+    fun selectMonth(month: String?) {
+        _selectedMonth.value = month
+        loadDashboard(month)
+    }
+
+    fun resetToCurrentMonth() {
+        selectMonth(null)
     }
 
     fun getTimeBasedGreeting(): String {

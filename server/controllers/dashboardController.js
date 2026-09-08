@@ -9,6 +9,21 @@ const Note = require('../models/Note');
 const getDashboardSummary = async (req, res) => {
   try {
     const userId = req.user._id;
+    const requestedMonth = req.query.month; // e.g. "2026-09"
+
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const activeMonth = requestedMonth && /^\d{4}-\d{2}$/.test(requestedMonth) ? requestedMonth : currentMonthKey;
+
+    const [reqYear, reqMonth] = activeMonth.split('-').map(Number);
+    const monthStartDate = new Date(reqYear, reqMonth - 1, 1, 0, 0, 0, 0);
+    const monthEndDate = new Date(reqYear, reqMonth, 1, 0, 0, 0, 0);
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const monthDisplayName = `${monthNames[reqMonth - 1]} ${reqYear}`;
 
     // Fetch recent transactions for this user
     const transactions = await Transaction.find({ userId })
@@ -17,14 +32,30 @@ const getDashboardSummary = async (req, res) => {
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
 
     const allUserTransactions = await Transaction.find({ userId });
 
     let currentBalance = 0;
     let todayExpenses = 0;
+    let monthlyIncome = 0;
+    let monthlyExpenses = 0;
+
+    const availableMonthsSet = new Set([currentMonthKey]);
 
     for (const t of allUserTransactions) {
       const amount = Number(t.amount) || 0;
+      const tDate = t.date ? new Date(t.date) : new Date(t.createdAt || Date.now());
+
+      // Collect available financial months from actual transaction history
+      if (!isNaN(tDate.getTime())) {
+        const y = tDate.getFullYear();
+        const m = String(tDate.getMonth() + 1).padStart(2, '0');
+        availableMonthsSet.add(`${y}-${m}`);
+      }
+
+      // Net balance across all historical time
       switch (t.type) {
         case 'income':
         case 'loan_received':
@@ -38,9 +69,42 @@ const getDashboardSummary = async (req, res) => {
           break;
       }
 
-      if (t.type === 'expense' && new Date(t.date) >= startOfToday) {
+      // Today's daily spending
+      if (t.type === 'expense' && tDate >= startOfToday && tDate <= endOfToday) {
         todayExpenses += amount;
       }
+
+      // Monthly financial period statistics (Requirement 8 & 9)
+      if (tDate >= monthStartDate && tDate < monthEndDate) {
+        if (t.type === 'income') {
+          monthlyIncome += amount;
+        } else if (t.type === 'expense') {
+          monthlyExpenses += amount;
+        }
+      }
+    }
+
+    // Sort available months descending (e.g. "2026-09", "2026-08")
+    const availableMonths = Array.from(availableMonthsSet).sort((a, b) => b.localeCompare(a));
+
+    // Requirement 10: Average Daily Income = Total Monthly Income / 30
+    const averageDailyIncome = Math.round((monthlyIncome / 30) * 100) / 100;
+
+    // Requirement 11: Benchmark comparison against average daily income
+    const diff = Math.abs(todayExpenses - averageDailyIncome);
+    const formattedDiff = Math.round(diff).toLocaleString();
+    let spendingStatus = 'below';
+    let spendingComparisonText = '';
+
+    if (todayExpenses > averageDailyIncome) {
+      spendingStatus = 'above';
+      spendingComparisonText = `You are Rs. ${formattedDiff} above your average daily income.`;
+    } else if (todayExpenses < averageDailyIncome) {
+      spendingStatus = 'below';
+      spendingComparisonText = `You are Rs. ${formattedDiff} below your average daily income.`;
+    } else {
+      spendingStatus = 'on_par';
+      spendingComparisonText = `Your daily spending is right on par with your average daily income.`;
     }
 
     // Compute active loan metrics (youOwe vs othersOwe)
@@ -108,6 +172,15 @@ const getDashboardSummary = async (req, res) => {
         totalNotesCount,
         pinnedNotesCount,
         recentActivity,
+        selectedMonth: activeMonth,
+        monthDisplayName,
+        monthlyIncome,
+        monthlyExpenses,
+        averageDailyIncome,
+        spendingStatus,
+        spendingDifference: diff,
+        spendingComparisonText,
+        availableMonths,
       },
     });
   } catch (err) {

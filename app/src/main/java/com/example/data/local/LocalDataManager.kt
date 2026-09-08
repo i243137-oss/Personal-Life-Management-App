@@ -31,6 +31,7 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -447,28 +448,79 @@ class LocalDataManager(context: Context) {
         )
     }
 
-    fun getDashboardData(): DashboardData {
+    fun getDashboardData(selectedMonth: String? = null): DashboardData {
         val txs = _transactionsFlow.value
         val loans = _loansFlow.value
 
-        var totalIncome = 0.0
-        var totalExpenses = 0.0
-        var todayExpenses = 0.0
-
+        val currentMonthKey = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
+        val activeMonth = if (!selectedMonth.isNullOrBlank()) selectedMonth else currentMonthKey
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
+        var totalAllTimeIncome = 0.0
+        var totalAllTimeExpenses = 0.0
+        var monthlyIncome = 0.0
+        var monthlyExpenses = 0.0
+        var todayExpenses = 0.0
+
+        val monthsSet = mutableSetOf(currentMonthKey)
+
         txs.forEach { tx ->
-            if (tx.type == "income") {
-                totalIncome += tx.amount
-            } else if (tx.type == "expense") {
-                totalExpenses += tx.amount
-                if (tx.date?.startsWith(todayStr) == true) {
-                    todayExpenses += tx.amount
+            val txDate = tx.date ?: ""
+            if (txDate.length >= 7) {
+                val m = txDate.substring(0, 7)
+                if (m.matches(Regex("""\d{4}-\d{2}"""))) {
+                    monthsSet.add(m)
                 }
+            }
+
+            // Net balance calculation across all time
+            when (tx.type) {
+                "income", "loan_received", "loan_repayment_received" -> totalAllTimeIncome += tx.amount
+                "expense", "loan_given", "loan_repayment_sent" -> totalAllTimeExpenses += tx.amount
+            }
+
+            // Monthly stats for the active financial period
+            if (txDate.startsWith(activeMonth)) {
+                if (tx.type == "income") {
+                    monthlyIncome += tx.amount
+                } else if (tx.type == "expense") {
+                    monthlyExpenses += tx.amount
+                }
+            }
+
+            // Today's daily spending
+            if (tx.type == "expense" && txDate.startsWith(todayStr)) {
+                todayExpenses += tx.amount
             }
         }
 
-        val currentBalance = totalIncome - totalExpenses
+        val currentBalance = totalAllTimeIncome - totalAllTimeExpenses
+        val availableMonths = monthsSet.sortedDescending()
+
+        // Requirement 10: Average Daily Income = Total Monthly Income / 30
+        val averageDailyIncome = monthlyIncome / 30.0
+
+        // Requirement 11: Benchmark comparison against average daily income
+        val diff = kotlin.math.abs(todayExpenses - averageDailyIncome)
+        val formattedDiff = NumberFormat.getNumberInstance(Locale.US).apply { maximumFractionDigits = 0 }.format(diff)
+        val (spendingStatus, spendingComparisonText) = when {
+            todayExpenses > averageDailyIncome -> {
+                "above" to "You are Rs. $formattedDiff above your average daily income."
+            }
+            todayExpenses < averageDailyIncome -> {
+                "below" to "You are Rs. $formattedDiff below your average daily income."
+            }
+            else -> {
+                "on_par" to "Your daily spending is right on par with your average daily income."
+            }
+        }
+
+        val monthDisplayName = try {
+            val date = SimpleDateFormat("yyyy-MM", Locale.US).parse(activeMonth)
+            if (date != null) SimpleDateFormat("MMMM yyyy", Locale.US).format(date) else activeMonth
+        } catch (_: Exception) {
+            activeMonth
+        }
 
         var youOwe = 0.0
         var othersOwe = 0.0
@@ -499,7 +551,16 @@ class LocalDataManager(context: Context) {
             pendingPackingCount = pendingPackingCount,
             totalNotesCount = totalNotesCount,
             pinnedNotesCount = pinnedNotesCount,
-            recentActivity = txs.take(5)
+            recentActivity = txs.take(5),
+            selectedMonth = activeMonth,
+            monthDisplayName = monthDisplayName,
+            monthlyIncome = monthlyIncome,
+            monthlyExpenses = monthlyExpenses,
+            averageDailyIncome = averageDailyIncome,
+            spendingStatus = spendingStatus,
+            spendingDifference = diff,
+            spendingComparisonText = spendingComparisonText,
+            availableMonths = availableMonths
         )
     }
 
