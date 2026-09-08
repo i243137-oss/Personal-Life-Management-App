@@ -46,12 +46,12 @@ app.use('/api/notes', noteRoutes);
 // Serve static frontend assets
 app.use(express.static(path.join(__dirname, 'public')));
 
-// SPA fallback for frontend client
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    return next();
+// SPA fallback for frontend client (non-API GET requests)
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api')) {
+    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  next();
 });
 
 // 404 handler for unmatched API routes
